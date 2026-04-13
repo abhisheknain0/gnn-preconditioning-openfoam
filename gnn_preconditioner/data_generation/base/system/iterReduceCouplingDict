@@ -1,0 +1,23 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      iterReduceCouplingDict;
+}
+enabled                 true;
+startInjectTime         0;
+injectEveryTimeStep     false;
+macroDt                 0.01;
+modelPath               "constant/iterreduce/model_inference.ts";
+contextDir              "constant/iterreduce/context";
+applyPressureGuess      true;
+preserveUz              true;
+guessBlendAlpha         1.0;
+pressureGaugeMode       mean;
+abortOnError            true;
+logGuessDiagnostics     true;
+dumpGuessFields         false;
+dumpGuessFieldLimit     0;
+device                  "cuda:0";
+predictorMode           model;

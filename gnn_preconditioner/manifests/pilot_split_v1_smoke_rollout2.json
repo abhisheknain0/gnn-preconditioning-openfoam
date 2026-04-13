@@ -1,0 +1,11 @@
+{
+  "train": [
+    "trajectory_116"
+  ],
+  "valid": [
+    "trajectory_16"
+  ],
+  "test": [
+    "trajectory_51"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "profile_name": "fine_legacy",
+  "mesh_size_coarse": 0.0020,
+  "mesh_size_fine": 0.0010,
+  "dist_min": 0.0003,
+  "dist_max": 0.0030,
+  "n_nodes_by_edge": 100
+}

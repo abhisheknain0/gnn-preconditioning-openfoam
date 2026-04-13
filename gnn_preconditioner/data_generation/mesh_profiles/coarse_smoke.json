@@ -1,0 +1,8 @@
+{
+  "profile_name": "coarse_smoke",
+  "mesh_size_coarse": 0.0034,
+  "mesh_size_fine": 0.0018,
+  "dist_min": 0.00045,
+  "dist_max": 0.0042,
+  "n_nodes_by_edge": 72
+}

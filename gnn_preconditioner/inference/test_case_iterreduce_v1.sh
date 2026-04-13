@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+CASES_ROOT="${ROOT_DIR}/gnn_preconditioner/data_generation/cases/pilot_v1"
+DATASET_PATH="${ROOT_DIR}/gnn_preconditioner/data_generation/datasets/iterreduce_pilot_v1.h5"
+CHECKPOINT_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/pilot_v1_h100/best_model.pt"
+STATS_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/pilot_v1_h100/stats.json"
+END_TIME="0.1"
+CASE_ID=""
+CASE_DIR=""
+RUN_ROOT=""
+PREPARE_ONLY="false"
+SKIP_COLD="false"
+LIST_CASES="false"
+PREDICTOR_MODE="model"
+START_INJECT_TIME=""
+INJECT_EVERY_TIME_STEP=""
+RANDOM_SCALE="${ITERREDUCE_RANDOM_SCALE:-1.0}"
+RANDOM_SEED="${ITERREDUCE_RANDOM_SEED:-1234}"
+
+usage() {
+  cat <<USAGE
+Usage:
+  $(basename "$0") --case-id <id> [options]
+  $(basename "$0") --case-dir <path> [options]
+
+Options:
+  --case-id <id>            Pilot case id, e.g. 51
+  --case-dir <path>         Full case path instead of case id
+  --cases-root <path>       Override case root (default: ${CASES_ROOT})
+  --dataset-path <path>     Override HDF5 dataset
+  --checkpoint-path <path>  Override best_model.pt
+  --stats-path <path>       Override stats.json
+  --end-time <scalar>       Benchmark end time (default: ${END_TIME})
+  --predictor-mode <mode>   IterReduce predictor mode: model, identity, random, bad_zero, or bad_reverse (default: ${PREDICTOR_MODE})
+  --start-inject-time <t>   Override startInjectTime in iterReduceCouplingDict
+  --inject-every-time-step <true|false>
+                            Override injectEveryTimeStep in iterReduceCouplingDict
+  --random-scale <scalar>   Random mode noise scale in target-std units (default: ${RANDOM_SCALE})
+  --random-seed <int>       Random mode seed (default: ${RANDOM_SEED})
+  --run-root <path>         Explicit output run root
+  --prepare-only            Only export/build context
+  --skip-cold               Skip cold baseline
+  --list-cases              Print available cases and exit
+  -h, --help                Show this help
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --case-id) CASE_ID="$2"; shift 2 ;;
+    --case-dir) CASE_DIR="$2"; shift 2 ;;
+    --cases-root) CASES_ROOT="$2"; shift 2 ;;
+    --dataset-path) DATASET_PATH="$2"; shift 2 ;;
+    --checkpoint-path) CHECKPOINT_PATH="$2"; shift 2 ;;
+    --stats-path) STATS_PATH="$2"; shift 2 ;;
+    --end-time) END_TIME="$2"; shift 2 ;;
+    --predictor-mode) PREDICTOR_MODE="$2"; shift 2 ;;
+    --start-inject-time) START_INJECT_TIME="$2"; shift 2 ;;
+    --inject-every-time-step) INJECT_EVERY_TIME_STEP="$2"; shift 2 ;;
+    --random-scale) RANDOM_SCALE="$2"; shift 2 ;;
+    --random-seed) RANDOM_SEED="$2"; shift 2 ;;
+    --run-root) RUN_ROOT="$2"; shift 2 ;;
+    --prepare-only) PREPARE_ONLY="true"; shift ;;
+    --skip-cold) SKIP_COLD="true"; shift ;;
+    --list-cases) LIST_CASES="true"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown arg: $1" >&2; usage; exit 2 ;;
+  esac
+done
+
+if [[ "${LIST_CASES}" == "true" ]]; then
+  ls "${CASES_ROOT}"
+  exit 0
+fi
+
+if [[ -n "${CASE_ID}" && -n "${CASE_DIR}" ]]; then
+  echo "Use either --case-id or --case-dir, not both." >&2
+  exit 2
+fi
+
+resolve_case_from_id() {
+  local raw_id="$1"
+  local case_num=$((10#${raw_id}))
+  local case_tag
+  printf -v case_tag "%03d" "${case_num}"
+  local matches=( "${CASES_ROOT}"/case_"${case_tag}"_* )
+  if [[ ${#matches[@]} -ne 1 || ! -d "${matches[0]}" ]]; then
+    echo "Could not resolve unique case for id ${raw_id} under ${CASES_ROOT}" >&2
+    exit 2
+  fi
+  CASE_DIR="${matches[0]}"
+  CASE_ID="${case_num}"
+}
+
+resolve_case_from_dir() {
+  local base
+  base="$(basename "${CASE_DIR}")"
+  if [[ ! "${base}" =~ ^case_([0-9]+)_ ]]; then
+    echo "Could not derive case id from case dir basename: ${base}" >&2
+    exit 2
+  fi
+  CASE_ID="$((10#${BASH_REMATCH[1]}))"
+}
+
+if [[ -n "${CASE_ID}" ]]; then
+  resolve_case_from_id "${CASE_ID}"
+elif [[ -n "${CASE_DIR}" ]]; then
+  resolve_case_from_dir
+else
+  usage
+  exit 2
+fi
+
+if [[ ! -d "${CASE_DIR}" ]]; then
+  echo "Case dir does not exist: ${CASE_DIR}" >&2
+  exit 2
+fi
+
+TRAJECTORY_KEY="trajectory_${CASE_ID}"
+
+if [[ -z "${RUN_ROOT}" ]]; then
+  local_tag="$(basename "${CASE_DIR}")"
+  time_tag="${END_TIME//./p}"
+  RUN_ROOT="${ROOT_DIR}/gnn_preconditioner/benchmarks/runs/${local_tag}_t${time_tag}_$(date -u +%Y%m%dT%H%M%SZ)"
+fi
+
+echo "[gnn_preconditioner] resolved case: ${CASE_DIR}"
+echo "[gnn_preconditioner] trajectory key: ${TRAJECTORY_KEY}"
+echo "[gnn_preconditioner] checkpoint: ${CHECKPOINT_PATH}"
+echo "[gnn_preconditioner] stats: ${STATS_PATH}"
+echo "[gnn_preconditioner] endTime: ${END_TIME}"
+echo "[gnn_preconditioner] predictorMode: ${PREDICTOR_MODE}"
+if [[ -n "${START_INJECT_TIME}" ]]; then
+  echo "[gnn_preconditioner] startInjectTime: ${START_INJECT_TIME}"
+fi
+if [[ -n "${INJECT_EVERY_TIME_STEP}" ]]; then
+  echo "[gnn_preconditioner] injectEveryTimeStep: ${INJECT_EVERY_TIME_STEP}"
+fi
+if [[ "${PREDICTOR_MODE}" == "random" ]]; then
+  echo "[gnn_preconditioner] randomScale: ${RANDOM_SCALE}"
+  echo "[gnn_preconditioner] randomSeed: ${RANDOM_SEED}"
+fi
+echo "[gnn_preconditioner] run root: ${RUN_ROOT}"
+
+CMD=(
+  bash "${SCRIPT_DIR}/run_case_iterreduce_v1.sh"
+  --case-dir "${CASE_DIR}"
+  --checkpoint-path "${CHECKPOINT_PATH}"
+  --stats-path "${STATS_PATH}"
+  --dataset-path "${DATASET_PATH}"
+  --trajectory-key "${TRAJECTORY_KEY}"
+  --run-root "${RUN_ROOT}"
+  --end-time "${END_TIME}"
+  --predictor-mode "${PREDICTOR_MODE}"
+)
+
+if [[ -n "${START_INJECT_TIME}" ]]; then
+  CMD+=(--start-inject-time "${START_INJECT_TIME}")
+fi
+if [[ -n "${INJECT_EVERY_TIME_STEP}" ]]; then
+  CMD+=(--inject-every-time-step "${INJECT_EVERY_TIME_STEP}")
+fi
+if [[ "${PREDICTOR_MODE}" == "random" ]]; then
+  CMD+=(--random-scale "${RANDOM_SCALE}" --random-seed "${RANDOM_SEED}")
+fi
+
+if [[ "${PREPARE_ONLY}" == "true" ]]; then
+  CMD+=(--prepare-only)
+fi
+if [[ "${SKIP_COLD}" == "true" ]]; then
+  CMD+=(--skip-cold)
+fi
+
+"${CMD[@]}"

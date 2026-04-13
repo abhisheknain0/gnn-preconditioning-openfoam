@@ -1,0 +1,8 @@
+{
+  "profile_name": "sweep_low",
+  "mesh_size_coarse": 0.0045,
+  "mesh_size_fine": 0.0024,
+  "dist_min": 0.0006,
+  "dist_max": 0.0055,
+  "n_nodes_by_edge": 60
+}

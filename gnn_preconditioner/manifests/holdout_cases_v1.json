@@ -1,0 +1,98 @@
+[
+  {
+    "case_id": 10,
+    "trajectory_key": "trajectory_10",
+    "Uinlet": 0.2196740061044693,
+    "xmid": 0.06933766603469849,
+    "ymid": 0.01124928891658783,
+    "ymax": 0.029999999329447746,
+    "nu": 1.4999999621068127e-05,
+    "canonical_case_name": "case_010_U0.220_H0.0112_L0.0693",
+    "legacy_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/gnn_preconditioner/dataGeneration_OF/cases/singleSet300/case_010_U0.22_H1.12_L6.9",
+    "iterreduce_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/data_generation/cases/pilot_v1/case_010_U0.220_H0.0112_L0.0693"
+  },
+  {
+    "case_id": 14,
+    "trajectory_key": "trajectory_14",
+    "Uinlet": 0.3951680064201355,
+    "xmid": 0.084358349442482,
+    "ymid": 0.013116993941366673,
+    "ymax": 0.029999999329447746,
+    "nu": 1.4999999621068127e-05,
+    "canonical_case_name": "case_014_U0.395_H0.0131_L0.0844",
+    "legacy_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/gnn_preconditioner/dataGeneration_OF/cases/singleSet300/case_014_U0.40_H1.31_L8.4",
+    "iterreduce_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/data_generation/cases/pilot_v1/case_014_U0.395_H0.0131_L0.0844"
+  },
+  {
+    "case_id": 34,
+    "trajectory_key": "trajectory_34",
+    "Uinlet": 0.16722099483013153,
+    "xmid": 0.0846707746386528,
+    "ymid": 0.008600463159382343,
+    "ymax": 0.029999999329447746,
+    "nu": 1.4999999621068127e-05,
+    "canonical_case_name": "case_034_U0.167_H0.0086_L0.0847",
+    "legacy_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/gnn_preconditioner/dataGeneration_OF/cases/singleSet300/case_034_U0.17_H0.86_L8.5",
+    "iterreduce_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/data_generation/cases/pilot_v1/case_034_U0.167_H0.0086_L0.0847"
+  },
+  {
+    "case_id": 51,
+    "trajectory_key": "trajectory_51",
+    "Uinlet": 0.3863280117511749,
+    "xmid": 0.09478552639484406,
+    "ymid": 0.008243739604949951,
+    "ymax": 0.029999999329447746,
+    "nu": 1.4999999621068127e-05,
+    "canonical_case_name": "case_051_U0.386_H0.0082_L0.0948",
+    "legacy_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/gnn_preconditioner/dataGeneration_OF/cases/singleSet300/case_051_U0.39_H0.82_L9.5",
+    "iterreduce_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/data_generation/cases/pilot_v1/case_051_U0.386_H0.0082_L0.0948"
+  },
+  {
+    "case_id": 78,
+    "trajectory_key": "trajectory_78",
+    "Uinlet": 0.3825330138206482,
+    "xmid": 0.06842608749866486,
+    "ymid": 0.010731562972068787,
+    "ymax": 0.029999999329447746,
+    "nu": 1.4999999621068127e-05,
+    "canonical_case_name": "case_078_U0.383_H0.0107_L0.0684",
+    "legacy_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/gnn_preconditioner/dataGeneration_OF/cases/singleSet300/case_078_U0.38_H1.07_L6.8",
+    "iterreduce_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/data_generation/cases/pilot_v1/case_078_U0.383_H0.0107_L0.0684"
+  },
+  {
+    "case_id": 97,
+    "trajectory_key": "trajectory_97",
+    "Uinlet": 0.30390098690986633,
+    "xmid": 0.07001002132892609,
+    "ymid": 0.014182120561599731,
+    "ymax": 0.029999999329447746,
+    "nu": 1.4999999621068127e-05,
+    "canonical_case_name": "case_097_U0.304_H0.0142_L0.0700",
+    "legacy_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/gnn_preconditioner/dataGeneration_OF/cases/singleSet300/case_097_U0.30_H1.42_L7.0",
+    "iterreduce_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/data_generation/cases/pilot_v1/case_097_U0.304_H0.0142_L0.0700"
+  },
+  {
+    "case_id": 171,
+    "trajectory_key": "trajectory_171",
+    "Uinlet": 0.10682699829339981,
+    "xmid": 0.07475545257329941,
+    "ymid": 0.013033452443778515,
+    "ymax": 0.029999999329447746,
+    "nu": 1.4999999621068127e-05,
+    "canonical_case_name": "case_171_U0.107_H0.0130_L0.0748",
+    "legacy_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/gnn_preconditioner/dataGeneration_OF/cases/singleSet300/case_171_U0.11_H1.30_L7.5",
+    "iterreduce_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/data_generation/cases/pilot_v1/case_171_U0.107_H0.0130_L0.0748"
+  },
+  {
+    "case_id": 278,
+    "trajectory_key": "trajectory_278",
+    "Uinlet": 0.14024199545383453,
+    "xmid": 0.06685774028301239,
+    "ymid": 0.008193065412342548,
+    "ymax": 0.029999999329447746,
+    "nu": 1.4999999621068127e-05,
+    "canonical_case_name": "case_278_U0.140_H0.0082_L0.0669",
+    "legacy_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/gnn_preconditioner/dataGeneration_OF/cases/singleSet300/case_278_U0.14_H0.82_L6.7",
+    "iterreduce_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/data_generation/cases/pilot_v1/case_278_U0.140_H0.0082_L0.0669"
+  }
+]

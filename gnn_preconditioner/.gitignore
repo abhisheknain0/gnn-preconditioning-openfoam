@@ -1,0 +1,18 @@
+# Local Python noise
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Generated training/runtime artifacts
+checkpoints/
+benchmarks/runs/
+data_generation/cases/
+data_generation/datasets/
+
+# OpenFOAM / solver build outputs
+openfoam_solver/platforms/
+openfoam_solver/**/Make/linux*
+
+# Common transient outputs
+*.log
+*.ts

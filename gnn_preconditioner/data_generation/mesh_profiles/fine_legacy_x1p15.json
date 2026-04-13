@@ -1,0 +1,8 @@
+{
+  "profile_name": "fine_legacy_x1p15",
+  "mesh_size_coarse": 0.0023,
+  "mesh_size_fine": 0.00115,
+  "dist_min": 0.000345,
+  "dist_max": 0.00345,
+  "n_nodes_by_edge": 100
+}

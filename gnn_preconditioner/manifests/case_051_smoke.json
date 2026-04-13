@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "case_id": 51,
+      "trajectory_key": "trajectory_51",
+      "Uinlet": 0.3863280117511749,
+      "xmid": 0.09478552639484406,
+      "ymid": 0.008243739604949951,
+      "ymax": 0.029999999329447746,
+      "nu": 1.4999999621068127e-05,
+      "canonical_case_name": "case_051_U0.386_H0.0082_L0.0948",
+      "legacy_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/gnn_preconditioner/dataGeneration_OF/cases/singleSet300/case_051_U0.39_H0.82_L9.5",
+      "iterreduce_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/data_generation/cases/pilot_v1/case_051_U0.386_H0.0082_L0.0948"
+    }
+  ]
+}

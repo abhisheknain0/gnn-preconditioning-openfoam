@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+
+import h5py
+import torch
+import torch.nn as nn
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from gnn_preconditioner.training import config
+from gnn_preconditioner.training.boundary_constraints import boundary_hold_masks
+from gnn_preconditioner.training.dataset import load_static_graph_from_group
+from gnn_preconditioner.training.model import MeshGraphNet
+from gnn_preconditioner.training.normalizer import Normalizer
+
+
+class IterReduceInferenceModule(nn.Module):
+    def __init__(
+        self,
+        model: MeshGraphNet,
+        normalizer: Normalizer,
+        node_positions: torch.Tensor,
+        cell_volumes: torch.Tensor,
+        boundary_mask: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_attr_raw: torch.Tensor,
+        apply_default_boundary_constraints: bool = True,
+    ):
+        super().__init__()
+        self.model = model.eval()
+        self.apply_default_boundary_constraints = bool(apply_default_boundary_constraints)
+        self.register_buffer("node_positions", node_positions)
+        self.register_buffer("cell_volumes", cell_volumes)
+        self.register_buffer("boundary_mask", boundary_mask)
+        self.register_buffer("edge_index", edge_index)
+        self.register_buffer("edge_attr", normalizer.normalize(edge_attr_raw, Normalizer.KEY_EDGE))
+        self.register_buffer("u_mean", torch.tensor(normalizer.stats[Normalizer.KEY_U_XY]["mean"], dtype=torch.float32))
+        self.register_buffer("u_std", torch.tensor(normalizer.stats[Normalizer.KEY_U_XY]["std"], dtype=torch.float32))
+        self.register_buffer("p_mean", torch.tensor(normalizer.stats[Normalizer.KEY_P_GAUGE]["mean"], dtype=torch.float32))
+        self.register_buffer("p_std", torch.tensor(normalizer.stats[Normalizer.KEY_P_GAUGE]["std"], dtype=torch.float32))
+        self.register_buffer("vol_mean", torch.tensor(normalizer.stats[Normalizer.KEY_CELL_VOLUME]["mean"], dtype=torch.float32))
+        self.register_buffer("vol_std", torch.tensor(normalizer.stats[Normalizer.KEY_CELL_VOLUME]["std"], dtype=torch.float32))
+        self.register_buffer("uin_mean", torch.tensor(normalizer.stats[Normalizer.KEY_UINLET]["mean"], dtype=torch.float32))
+        self.register_buffer("uin_std", torch.tensor(normalizer.stats[Normalizer.KEY_UINLET]["std"], dtype=torch.float32))
+        self.register_buffer("pos_mean", torch.tensor(normalizer.stats[Normalizer.KEY_POS]["mean"], dtype=torch.float32))
+        self.register_buffer("pos_std", torch.tensor(normalizer.stats[Normalizer.KEY_POS]["std"], dtype=torch.float32))
+        self.register_buffer("du_mean", torch.tensor(normalizer.stats[Normalizer.KEY_TARGET_DU]["mean"], dtype=torch.float32))
+        self.register_buffer("du_std", torch.tensor(normalizer.stats[Normalizer.KEY_TARGET_DU]["std"], dtype=torch.float32))
+        self.register_buffer("dp_mean", torch.tensor(normalizer.stats[Normalizer.KEY_TARGET_DP]["mean"], dtype=torch.float32))
+        self.register_buffer("dp_std", torch.tensor(normalizer.stats[Normalizer.KEY_TARGET_DP]["std"], dtype=torch.float32))
+        velocity_hold_mask, pressure_hold_mask = boundary_hold_masks(boundary_mask)
+        self.register_buffer("velocity_hold_mask", velocity_hold_mask)
+        self.register_buffer("pressure_hold_mask", pressure_hold_mask)
+
+    def forward(self, u_xy_t: torch.Tensor, p_gauge_t: torch.Tensor, u_inlet: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        u_norm = (u_xy_t - self.u_mean) / self.u_std
+        p_norm = (p_gauge_t - self.p_mean) / self.p_std
+        vol_norm = (self.cell_volumes - self.vol_mean) / self.vol_std
+        pos_norm = (self.node_positions - self.pos_mean) / self.pos_std
+        inlet = u_inlet.reshape(1).expand(self.node_positions.shape[0], 1)
+        inlet_norm = (inlet - self.uin_mean) / self.uin_std
+        x = torch.cat([u_norm, p_norm, self.boundary_mask, vol_norm, inlet_norm, pos_norm], dim=-1)
+        pred = self.model(x, self.edge_attr, self.edge_index)
+        du = pred[:, :2] * self.du_std + self.du_mean
+        dp = pred[:, 2:3] * self.dp_std + self.dp_mean
+        u_next = u_xy_t + du
+        p_next = p_gauge_t + dp
+        if self.apply_default_boundary_constraints:
+            u_next = torch.where(self.velocity_hold_mask.unsqueeze(-1), u_xy_t, u_next)
+            p_next = torch.where(self.pressure_hold_mask.unsqueeze(-1), p_gauge_t, p_next)
+        return u_next, p_next
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--checkpoint-path", type=Path, required=True)
+    parser.add_argument("--stats-path", type=Path, required=True)
+    parser.add_argument("--dataset-path", type=Path, default=config.DATASET_PATH)
+    parser.add_argument("--trajectory-key", type=str, required=True)
+    parser.add_argument("--output-path", type=Path, required=True)
+    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--hidden-dim", type=int, default=None)
+    parser.add_argument("--message-passing-steps", type=int, default=None)
+    parser.add_argument(
+        "--representation",
+        choices=["auto", "surface_prism", "volume"],
+        default=config.REPRESENTATION,
+    )
+    parser.add_argument(
+        "--apply-default-boundary-constraints",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Legacy mode: hold velocity on inlet/wall and pressure on outlet during exported rollout.",
+    )
+    return parser.parse_args()
+
+
+def _resolve_checkpoint_config(args: argparse.Namespace) -> tuple[int, int]:
+    hidden_dim = args.hidden_dim
+    message_passing_steps = args.message_passing_steps
+    summary_path = args.checkpoint_path.parent / "train_summary.json"
+    if summary_path.exists():
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        if hidden_dim is None:
+            hidden_dim = int(summary.get("hidden_dim", config.HIDDEN_DIM))
+        if message_passing_steps is None:
+            message_passing_steps = int(summary.get("message_passing_steps", config.MESSAGE_PASSING_STEPS))
+    if hidden_dim is None:
+        hidden_dim = int(config.HIDDEN_DIM)
+    if message_passing_steps is None:
+        message_passing_steps = int(config.MESSAGE_PASSING_STEPS)
+    return hidden_dim, message_passing_steps
+
+
+def main() -> None:
+    args = _parse_args()
+    device = torch.device(args.device)
+    hidden_dim, message_passing_steps = _resolve_checkpoint_config(args)
+    normalizer = Normalizer()
+    normalizer.load(args.stats_path)
+    with h5py.File(args.dataset_path, "r") as f:
+        g = f[args.trajectory_key]
+        static = load_static_graph_from_group(g, normalizer, device=device)
+        velocity0 = torch.tensor(g["velocity_xy"][0], dtype=torch.float32, device=device)
+        pressure0 = torch.tensor(g["pressure_gauge"][0], dtype=torch.float32, device=device).unsqueeze(-1)
+        uinlet = float(g["Uinlet"][()][0])
+    model = MeshGraphNet(
+        input_dim_nodes=int(static["node_input_dim"]),
+        input_dim_edges=int(static["edge_input_dim"]),
+        hidden_dim=hidden_dim,
+        num_mp_steps=message_passing_steps,
+    ).to(device)
+    ckpt = torch.load(args.checkpoint_path, map_location=device)
+    model.load_state_dict(ckpt["model_state"])
+    wrapper = IterReduceInferenceModule(
+        model,
+        normalizer,
+        static["positions"],
+        static["cell_volumes"],
+        static["boundary_mask"],
+        static["edge_index"],
+        static["edge_attr_raw"],
+        apply_default_boundary_constraints=bool(args.apply_default_boundary_constraints),
+    ).to(device)
+    wrapper.eval()
+    example_inputs = (velocity0, pressure0, torch.tensor([uinlet], dtype=torch.float32, device=device))
+    traced = torch.jit.trace(wrapper, example_inputs)
+    args.output_path.parent.mkdir(parents=True, exist_ok=True)
+    traced.save(str(args.output_path))
+    meta = {
+        "trajectory_key": args.trajectory_key,
+        "output_path": str(args.output_path.resolve()),
+        "device": str(device),
+        "representation": str(static["representation"]),
+        "hidden_dim": int(hidden_dim),
+        "message_passing_steps": int(message_passing_steps),
+        "surface_edge_feature_mode": str(config.SURFACE_EDGE_FEATURE_MODE),
+        "apply_default_boundary_constraints": bool(args.apply_default_boundary_constraints),
+        "n_nodes": int(static["positions"].shape[0]),
+        "n_edges_directed": int(static["edge_index"].shape[1]),
+    }
+    args.output_path.with_suffix(".meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    print(json.dumps(meta, indent=2))
+
+
+if __name__ == "__main__":
+    main()

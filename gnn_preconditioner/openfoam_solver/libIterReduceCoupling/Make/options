@@ -1,0 +1,37 @@
+TORCH_DIR ?= $(shell python3 -c "import os, torch; print(os.path.dirname(torch.__file__))")
+TORCH_ABI ?= 1
+TORCH_INC_DIR := $(TORCH_DIR)/include
+TORCH_API_INC_DIR := $(TORCH_INC_DIR)/torch/csrc/api/include
+TORCH_LIB_DIR := $(TORCH_DIR)/lib
+
+TORCH_LINK_LIBS = \
+    -ltorch \
+    -ltorch_cpu
+
+ifneq (,$(wildcard $(TORCH_LIB_DIR)/libtorch_cuda.so))
+TORCH_LINK_LIBS += -ltorch_cuda
+endif
+
+TORCH_LINK_LIBS += -lc10
+
+ifneq (,$(wildcard $(TORCH_LIB_DIR)/libc10_cuda.so))
+TORCH_LINK_LIBS += -lc10_cuda
+endif
+
+EXE_INC = \
+    -std=c++17 \
+    -D_GLIBCXX_USE_CXX11_ABI=$(TORCH_ABI) \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude \
+    -I$(TORCH_INC_DIR) \
+    -I$(TORCH_API_INC_DIR)
+
+LIB_LIBS = \
+    -lfiniteVolume \
+    -lmeshTools \
+    -lOpenFOAM \
+    -L$(TORCH_LIB_DIR) \
+    -Wl,-rpath,$(TORCH_LIB_DIR) \
+    -Wl,--no-as-needed \
+    $(TORCH_LINK_LIBS) \
+    -Wl,--as-needed

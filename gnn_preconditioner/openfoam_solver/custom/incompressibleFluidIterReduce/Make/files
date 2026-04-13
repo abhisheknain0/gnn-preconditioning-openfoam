@@ -1,0 +1,7 @@
+setRDeltaT.C
+moveMesh.C
+momentumPredictor.C
+correctPressure.C
+incompressibleFluidIterReduce.C
+
+LIB = $(FOAM_USER_LIBBIN)/libincompressibleFluid_iterreduce
