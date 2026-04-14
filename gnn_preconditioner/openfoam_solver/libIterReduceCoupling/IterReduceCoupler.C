@@ -139,12 +139,15 @@ IterReduceCoupler::IterReduceCoupler(const fvMesh& mesh)
     startInjectTime_(0),
     macroDt_(0.01),
     guessBlendAlpha_(1.0),
+    gnnTrainingDt_(0.01),
+    dtScaledAlphaMax_(1.0),
     timeTol_(1e-9),
     nextInjectionTime_(0),
     lastInjectedTimeIndex_(-1),
     dumpGuessFieldLimit_(0),
     device_("cpu"),
     predictorMode_("model"),
+    blendMode_("manual"),
     pressureGaugeMode_("mean"),
     modelPath_("constant/iterreduce/model_inference.ts"),
     contextDir_("constant/iterreduce/context"),
@@ -203,7 +206,27 @@ void IterReduceCoupler::readControls()
     dumpGuessFieldLimit_ = dict.lookupOrDefault<label>("dumpGuessFieldLimit", dumpGuessFieldLimit_);
     device_ = dict.lookupOrDefault<word>("device", device_);
     predictorMode_ = dict.lookupOrDefault<word>("predictorMode", predictorMode_);
+    blendMode_ = dict.lookupOrDefault<word>("blendMode", blendMode_);
+    gnnTrainingDt_ = dict.lookupOrDefault<scalar>("gnnTrainingDt", gnnTrainingDt_);
+    dtScaledAlphaMax_ = dict.lookupOrDefault<scalar>("dtScaledAlphaMax", dtScaledAlphaMax_);
     guessBlendAlpha_ = min(max(guessBlendAlpha_, scalar(0)), scalar(1));
+    dtScaledAlphaMax_ = min(max(dtScaledAlphaMax_, scalar(0)), scalar(1));
+
+    if (blendMode_ != "manual" && blendMode_ != "dtScaled")
+    {
+        WarningInFunction
+            << "Unknown blendMode '" << blendMode_
+            << "'; falling back to 'manual'" << nl;
+        blendMode_ = "manual";
+    }
+
+    if (blendMode_ == "dtScaled" && gnnTrainingDt_ <= SMALL)
+    {
+        WarningInFunction
+            << "blendMode=dtScaled requires gnnTrainingDt > 0; got "
+            << gnnTrainingDt_ << "; falling back to 'manual'" << nl;
+        blendMode_ = "manual";
+    }
 }
 
 
@@ -504,6 +527,14 @@ bool IterReduceCoupler::inject
     vectorField& Ufld = U.primitiveFieldRef();
     scalarField& pfld = p.primitiveFieldRef();
 
+    const scalar dtOF = mesh_.time().deltaTValue();
+    scalar alphaEff = guessBlendAlpha_;
+    if (blendMode_ == "dtScaled")
+    {
+        const scalar ratio = dtOF / gnnTrainingDt_;
+        alphaEff = min(max(ratio, scalar(0)), dtScaledAlphaMax_);
+    }
+
     scalar sumDU2 = 0;
     scalar sumU2 = 0;
     scalar sumDP2 = 0;
@@ -514,9 +545,9 @@ bool IterReduceCoupler::inject
         const scalar guessUy = scalar(predUPtr[2*celli + 1]);
         const scalar outOfPlane = preserveUz_ ? Uprev[celli].z() : 0.0;
         const vector guessU(guessUx, guessUy, outOfPlane);
-        const vector blendedU = (1.0 - guessBlendAlpha_)*Uprev[celli] + guessBlendAlpha_*guessU;
+        const vector blendedU = (1.0 - alphaEff)*Uprev[celli] + alphaEff*guessU;
         const scalar guessP = scalar(predPPtr[celli]) + meanP;
-        const scalar blendedP = (1.0 - guessBlendAlpha_)*pprev[celli] + guessBlendAlpha_*guessP;
+        const scalar blendedP = (1.0 - alphaEff)*pprev[celli] + alphaEff*guessP;
         sumDU2 += magSqr(blendedU - Uprev[celli]);
         sumU2 += magSqr(Uprev[celli]);
         if (applyPressureGuess_)
@@ -543,6 +574,10 @@ bool IterReduceCoupler::inject
         Info<< "iterReduceCoupling: injected guess"
             << " time=" << currentTime
             << " timeIndex=" << timeIndex
+            << " blendMode=" << blendMode_
+            << " dtOF=" << dtOF
+            << " dtGNN=" << gnnTrainingDt_
+            << " alphaEff=" << alphaEff
             << " inletUx=" << inletUx
             << " ||dUxy||2=" << dUNorm
             << " dUxy_relL2=" << dURel;

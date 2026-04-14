@@ -30,12 +30,15 @@ class IterReduceCoupler
     scalar startInjectTime_;
     scalar macroDt_;
     scalar guessBlendAlpha_;
+    scalar gnnTrainingDt_;
+    scalar dtScaledAlphaMax_;
     scalar timeTol_;
     scalar nextInjectionTime_;
     label lastInjectedTimeIndex_;
     label dumpGuessFieldLimit_;
     word device_;
     word predictorMode_;
+    word blendMode_;
     word pressureGaugeMode_;
     fileName modelPath_;
     fileName contextDir_;

@@ -21,3 +21,6 @@ dumpGuessFields         false;
 dumpGuessFieldLimit     0;
 device                  "cuda:0";
 predictorMode           model;
+blendMode               manual;      // manual | dtScaled
+gnnTrainingDt           0.01;        // used when blendMode=dtScaled
+dtScaledAlphaMax        1.0;         // upper clamp on dt_OF/dt_GNN

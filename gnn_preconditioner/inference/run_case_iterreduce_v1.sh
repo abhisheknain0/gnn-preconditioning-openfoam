@@ -16,6 +16,11 @@ END_TIME=""
 PREDICTOR_MODE=""
 START_INJECT_TIME=""
 INJECT_EVERY_TIME_STEP=""
+MACRO_DT=""
+ROLLOUT_STEPS=""
+BLEND_MODE=""
+GNN_TRAINING_DT=""
+DT_SCALED_ALPHA_MAX=""
 EXPORT_DEVICE="${ITERREDUCE_EXPORT_DEVICE:-cuda:0}"
 RANDOM_SCALE="${ITERREDUCE_RANDOM_SCALE:-1.0}"
 RANDOM_SEED="${ITERREDUCE_RANDOM_SEED:-1234}"
@@ -99,6 +104,11 @@ while [[ $# -gt 0 ]]; do
     --predictor-mode) PREDICTOR_MODE="$2"; shift 2 ;;
     --start-inject-time) START_INJECT_TIME="$2"; shift 2 ;;
     --inject-every-time-step) INJECT_EVERY_TIME_STEP="$2"; shift 2 ;;
+    --macro-dt) MACRO_DT="$2"; shift 2 ;;
+    --rollout-steps) ROLLOUT_STEPS="$2"; shift 2 ;;
+    --blend-mode) BLEND_MODE="$2"; shift 2 ;;
+    --gnn-training-dt) GNN_TRAINING_DT="$2"; shift 2 ;;
+    --dt-scaled-alpha-max) DT_SCALED_ALPHA_MAX="$2"; shift 2 ;;
     --random-scale) RANDOM_SCALE="$2"; shift 2 ;;
     --random-seed) RANDOM_SEED="$2"; shift 2 ;;
     --export-device) EXPORT_DEVICE="$2"; shift 2 ;;
@@ -153,6 +163,21 @@ apply_run_controls() {
   if [[ -n "${INJECT_EVERY_TIME_STEP}" ]]; then
     foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry injectEveryTimeStep -set "${INJECT_EVERY_TIME_STEP}" >/dev/null
   fi
+  if [[ -n "${MACRO_DT}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry macroDt -set "${MACRO_DT}" >/dev/null
+  fi
+  if [[ -n "${BLEND_MODE}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry blendMode -set "${BLEND_MODE}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry blendMode -set "${BLEND_MODE}" >/dev/null
+  fi
+  if [[ -n "${GNN_TRAINING_DT}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry gnnTrainingDt -set "${GNN_TRAINING_DT}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry gnnTrainingDt -set "${GNN_TRAINING_DT}" >/dev/null
+  fi
+  if [[ -n "${DT_SCALED_ALPHA_MAX}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry dtScaledAlphaMax -set "${DT_SCALED_ALPHA_MAX}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry dtScaledAlphaMax -set "${DT_SCALED_ALPHA_MAX}" >/dev/null
+  fi
 }
 
 clean_case_for_run "${PREP_CASE}"
@@ -173,13 +198,19 @@ elif [[ "${PREDICTOR_MODE}" == bad_* ]]; then
     --mode "${PREDICTOR_MODE#bad_}" \
     --output-path "${PREP_CASE}/constant/iterreduce/model_inference.ts"
 else
-  python3 "${ROOT_DIR}/gnn_preconditioner/training/export_torchscript_inference.py" \
-    --checkpoint-path "${CHECKPOINT_PATH}" \
-    --stats-path "${STATS_PATH}" \
-    --dataset-path "${DATASET_PATH}" \
-    --trajectory-key "${TRAJECTORY_KEY}" \
-    --device "${EXPORT_DEVICE}" \
+  EXPORT_CMD=(
+    python3 "${ROOT_DIR}/gnn_preconditioner/training/export_torchscript_inference.py"
+    --checkpoint-path "${CHECKPOINT_PATH}"
+    --stats-path "${STATS_PATH}"
+    --dataset-path "${DATASET_PATH}"
+    --trajectory-key "${TRAJECTORY_KEY}"
+    --device "${EXPORT_DEVICE}"
     --output-path "${PREP_CASE}/constant/iterreduce/model_inference.ts"
+  )
+  if [[ -n "${ROLLOUT_STEPS}" ]]; then
+    EXPORT_CMD+=(--rollout-steps "${ROLLOUT_STEPS}")
+  fi
+  "${EXPORT_CMD[@]}"
 fi
 
 echo "[gnn_preconditioner] building runtime context"
