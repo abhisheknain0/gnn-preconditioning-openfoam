@@ -22,6 +22,9 @@ from gnn_preconditioner.training.normalizer import Normalizer
 
 
 class IterReduceInferenceModule(nn.Module):
+    rollout_steps: torch.jit.Final[int]
+    apply_default_boundary_constraints: torch.jit.Final[bool]
+
     def __init__(
         self,
         model: MeshGraphNet,
@@ -32,10 +35,12 @@ class IterReduceInferenceModule(nn.Module):
         edge_index: torch.Tensor,
         edge_attr_raw: torch.Tensor,
         apply_default_boundary_constraints: bool = True,
+        rollout_steps: int = 1,
     ):
         super().__init__()
         self.model = model.eval()
         self.apply_default_boundary_constraints = bool(apply_default_boundary_constraints)
+        self.rollout_steps = int(rollout_steps)
         self.register_buffer("node_positions", node_positions)
         self.register_buffer("cell_volumes", cell_volumes)
         self.register_buffer("boundary_mask", boundary_mask)
@@ -60,22 +65,27 @@ class IterReduceInferenceModule(nn.Module):
         self.register_buffer("pressure_hold_mask", pressure_hold_mask)
 
     def forward(self, u_xy_t: torch.Tensor, p_gauge_t: torch.Tensor, u_inlet: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        u_norm = (u_xy_t - self.u_mean) / self.u_std
-        p_norm = (p_gauge_t - self.p_mean) / self.p_std
         vol_norm = (self.cell_volumes - self.vol_mean) / self.vol_std
         pos_norm = (self.node_positions - self.pos_mean) / self.pos_std
         inlet = u_inlet.reshape(1).expand(self.node_positions.shape[0], 1)
         inlet_norm = (inlet - self.uin_mean) / self.uin_std
-        x = torch.cat([u_norm, p_norm, self.boundary_mask, vol_norm, inlet_norm, pos_norm], dim=-1)
-        pred = self.model(x, self.edge_attr, self.edge_index)
-        du = pred[:, :2] * self.du_std + self.du_mean
-        dp = pred[:, 2:3] * self.dp_std + self.dp_mean
-        u_next = u_xy_t + du
-        p_next = p_gauge_t + dp
-        if self.apply_default_boundary_constraints:
-            u_next = torch.where(self.velocity_hold_mask.unsqueeze(-1), u_xy_t, u_next)
-            p_next = torch.where(self.pressure_hold_mask.unsqueeze(-1), p_gauge_t, p_next)
-        return u_next, p_next
+        u_cur = u_xy_t
+        p_cur = p_gauge_t
+        for _ in range(self.rollout_steps):
+            u_norm = (u_cur - self.u_mean) / self.u_std
+            p_norm = (p_cur - self.p_mean) / self.p_std
+            x = torch.cat([u_norm, p_norm, self.boundary_mask, vol_norm, inlet_norm, pos_norm], dim=-1)
+            pred = self.model(x, self.edge_attr, self.edge_index)
+            du = pred[:, :2] * self.du_std + self.du_mean
+            dp = pred[:, 2:3] * self.dp_std + self.dp_mean
+            u_next = u_cur + du
+            p_next = p_cur + dp
+            if self.apply_default_boundary_constraints:
+                u_next = torch.where(self.velocity_hold_mask.unsqueeze(-1), u_cur, u_next)
+                p_next = torch.where(self.pressure_hold_mask.unsqueeze(-1), p_cur, p_next)
+            u_cur = u_next
+            p_cur = p_next
+        return u_cur, p_cur
 
 
 def _parse_args() -> argparse.Namespace:
@@ -98,6 +108,12 @@ def _parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Legacy mode: hold velocity on inlet/wall and pressure on outlet during exported rollout.",
+    )
+    parser.add_argument(
+        "--rollout-steps",
+        type=int,
+        default=1,
+        help="Number of internal model steps per exported forward() call. Default 1 (one-step forecast).",
     )
     return parser.parse_args()
 
@@ -148,10 +164,14 @@ def main() -> None:
         static["edge_index"],
         static["edge_attr_raw"],
         apply_default_boundary_constraints=bool(args.apply_default_boundary_constraints),
+        rollout_steps=int(args.rollout_steps),
     ).to(device)
     wrapper.eval()
+    for p in wrapper.parameters():
+        p.requires_grad_(False)
     example_inputs = (velocity0, pressure0, torch.tensor([uinlet], dtype=torch.float32, device=device))
-    traced = torch.jit.trace(wrapper, example_inputs)
+    with torch.no_grad():
+        traced = torch.jit.trace(wrapper, example_inputs)
     args.output_path.parent.mkdir(parents=True, exist_ok=True)
     traced.save(str(args.output_path))
     meta = {
@@ -163,6 +183,7 @@ def main() -> None:
         "message_passing_steps": int(message_passing_steps),
         "surface_edge_feature_mode": str(config.SURFACE_EDGE_FEATURE_MODE),
         "apply_default_boundary_constraints": bool(args.apply_default_boundary_constraints),
+        "rollout_steps": int(args.rollout_steps),
         "n_nodes": int(static["positions"].shape[0]),
         "n_edges_directed": int(static["edge_index"].shape[1]),
     }

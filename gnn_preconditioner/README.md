@@ -20,11 +20,18 @@ Top-level layout:
 - `openfoam_solver/`: isolated runtime stack for the new method
 - `docs/`: schemas and design notes
 
-Environment prerequisite:
+Environment prerequisite (path is relative — pick the one that matches your cwd):
 
 ```bash
+# From the repo root (ma_gnn_pc/):
+source gnn_preconditioner/setup_env.sh --runtime-only
+
+# From inside this directory (gnn_preconditioner/):
 source setup_env.sh --runtime-only
 ```
+
+Bash-tool calls do not persist env between invocations — the source command
+must run in the same Bash call as the Python/solver invocation that follows.
 
 Current implementation status:
 - implemented:

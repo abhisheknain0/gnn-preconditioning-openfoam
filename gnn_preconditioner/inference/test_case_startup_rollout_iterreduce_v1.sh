@@ -4,9 +4,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-CASES_ROOT="${ROOT_DIR}/gnn_preconditioner/data_generation/cases/pilot_v1"
-CHECKPOINT_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/pilot_v1_h100/best_model.pt"
-STATS_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/pilot_v1_h100/stats.json"
+CASES_ROOT="${ROOT_DIR}/gnn_preconditioner/data_generation/cases/full_surface_coarse_v1_t3p0"
+CHECKPOINT_DIR_DEFAULT="${ROOT_DIR}/gnn_preconditioner/checkpoints/full_surface_coarse_v1_t3p0_state_hd128_seed1337_run1"
+CHECKPOINT_PATH="${CHECKPOINT_DIR_DEFAULT}/best_model.pt"
+STATS_PATH="${CHECKPOINT_DIR_DEFAULT}/stats.json"
 END_TIME="0.1"
 SOLVER="pimpleFoam"
 CASE_ID=""
@@ -40,12 +41,12 @@ ensure_runtime_env() {
   if command -v foamDictionary >/dev/null 2>&1 && command -v "${SOLVER}" >/dev/null 2>&1; then
     return
   fi
-  if [[ -f "${ROOT_DIR}/setup_env.sh" ]]; then
+  if [[ -f "${ROOT_DIR}/gnn_preconditioner/setup_env.sh" ]]; then
     # shellcheck source=/dev/null
-    source "${ROOT_DIR}/setup_env.sh" --runtime-only >/dev/null 2>&1 || true
+    source "${ROOT_DIR}/gnn_preconditioner/setup_env.sh" --runtime-only >/dev/null 2>&1 || true
   fi
   if ! command -v foamDictionary >/dev/null 2>&1 || ! command -v "${SOLVER}" >/dev/null 2>&1; then
-    echo "OpenFOAM runtime environment is not available. Source setup_env.sh --runtime-only first." >&2
+    echo "OpenFOAM runtime environment is not available. Source gnn_preconditioner/setup_env.sh --runtime-only first." >&2
     exit 3
   fi
 }

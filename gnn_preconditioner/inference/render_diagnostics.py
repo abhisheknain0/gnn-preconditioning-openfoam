@@ -361,6 +361,14 @@ def render_diagnostics(
     with h5py.File(dataset_path, "r") as f:
         g = f[trajectory_key]
         source_case_path = Path(str(g.attrs["source_case_path"]))
+        if not source_case_path.exists():
+            repo_root = Path(__file__).resolve().parents[2]
+            parts = source_case_path.parts
+            if "cases" in parts:
+                idx = parts.index("cases")
+                candidate = repo_root / "gnn_preconditioner" / "data_generation" / Path(*parts[idx:])
+                if candidate.exists():
+                    source_case_path = candidate
         geo_path = source_case_path / "system" / "geometry.geo"
         polygon, segments = _bfs_polygon_and_segments(geo_path)
         static = load_static_graph_from_group(g, normalizer, device=device_obj)

@@ -13,11 +13,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-# --- Full 300-case checkpoint paths ---
+# --- Full 300-case checkpoint paths (override CHECKPOINT_DIR env to swap model) ---
 CASES_ROOT="${ROOT_DIR}/gnn_preconditioner/data_generation/cases/full_surface_coarse_v1_t3p0"
 DATASET_PATH="${ROOT_DIR}/gnn_preconditioner/data_generation/datasets/iterreduce_full_surface_coarse_v1_t3p0.h5"
-CHECKPOINT_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/full_surface_coarse_v1_t3p0_state_hd128_seed1337_run1/best_model.pt"
-STATS_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/full_surface_coarse_v1_t3p0_state_hd128_seed1337_run1/stats.json"
+CHECKPOINT_DIR="${CHECKPOINT_DIR:-${ROOT_DIR}/gnn_preconditioner/checkpoints/full_surface_coarse_v1_t3p0_state_hd128_seed1337_run1}"
+CHECKPOINT_PATH="${CHECKPOINT_DIR}/best_model.pt"
+STATS_PATH="${CHECKPOINT_DIR}/stats.json"
+TAG="${TAG:-$(basename "${CHECKPOINT_DIR}")}"
 
 END_TIME="0.1"
 DRY_RUN="false"
@@ -55,7 +57,7 @@ done
 
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 if [[ -z "${RESULTS_DIR}" ]]; then
-  RESULTS_DIR="${ROOT_DIR}/gnn_preconditioner/benchmarks/runs/test_set_bench_t${END_TIME//./p}_${TIMESTAMP}"
+  RESULTS_DIR="${ROOT_DIR}/gnn_preconditioner/benchmarks/runs/test_set_bench_t${END_TIME//./p}_${TAG}_${TIMESTAMP}"
 fi
 
 echo "=== Test Set Benchmark ==="

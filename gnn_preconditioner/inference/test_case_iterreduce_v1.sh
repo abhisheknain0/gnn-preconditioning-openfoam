@@ -18,6 +18,11 @@ LIST_CASES="false"
 PREDICTOR_MODE="model"
 START_INJECT_TIME=""
 INJECT_EVERY_TIME_STEP=""
+MACRO_DT=""
+ROLLOUT_STEPS=""
+BLEND_MODE=""
+GNN_TRAINING_DT=""
+DT_SCALED_ALPHA_MAX=""
 RANDOM_SCALE="${ITERREDUCE_RANDOM_SCALE:-1.0}"
 RANDOM_SEED="${ITERREDUCE_RANDOM_SEED:-1234}"
 
@@ -61,6 +66,11 @@ while [[ $# -gt 0 ]]; do
     --predictor-mode) PREDICTOR_MODE="$2"; shift 2 ;;
     --start-inject-time) START_INJECT_TIME="$2"; shift 2 ;;
     --inject-every-time-step) INJECT_EVERY_TIME_STEP="$2"; shift 2 ;;
+    --macro-dt) MACRO_DT="$2"; shift 2 ;;
+    --rollout-steps) ROLLOUT_STEPS="$2"; shift 2 ;;
+    --blend-mode) BLEND_MODE="$2"; shift 2 ;;
+    --gnn-training-dt) GNN_TRAINING_DT="$2"; shift 2 ;;
+    --dt-scaled-alpha-max) DT_SCALED_ALPHA_MAX="$2"; shift 2 ;;
     --random-scale) RANDOM_SCALE="$2"; shift 2 ;;
     --random-seed) RANDOM_SEED="$2"; shift 2 ;;
     --run-root) RUN_ROOT="$2"; shift 2 ;;
@@ -163,6 +173,21 @@ if [[ -n "${START_INJECT_TIME}" ]]; then
 fi
 if [[ -n "${INJECT_EVERY_TIME_STEP}" ]]; then
   CMD+=(--inject-every-time-step "${INJECT_EVERY_TIME_STEP}")
+fi
+if [[ -n "${MACRO_DT}" ]]; then
+  CMD+=(--macro-dt "${MACRO_DT}")
+fi
+if [[ -n "${ROLLOUT_STEPS}" ]]; then
+  CMD+=(--rollout-steps "${ROLLOUT_STEPS}")
+fi
+if [[ -n "${BLEND_MODE}" ]]; then
+  CMD+=(--blend-mode "${BLEND_MODE}")
+fi
+if [[ -n "${GNN_TRAINING_DT}" ]]; then
+  CMD+=(--gnn-training-dt "${GNN_TRAINING_DT}")
+fi
+if [[ -n "${DT_SCALED_ALPHA_MAX}" ]]; then
+  CMD+=(--dt-scaled-alpha-max "${DT_SCALED_ALPHA_MAX}")
 fi
 if [[ "${PREDICTOR_MODE}" == "random" ]]; then
   CMD+=(--random-scale "${RANDOM_SCALE}" --random-seed "${RANDOM_SEED}")
