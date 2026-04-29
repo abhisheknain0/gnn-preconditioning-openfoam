@@ -13,6 +13,8 @@ RUN_ROOT="${ROOT_DIR}/gnn_preconditioner/benchmarks/runs/$(date -u +%Y%m%dT%H%M%
 PREPARE_ONLY="false"
 SKIP_COLD="false"
 END_TIME=""
+ADJUST_TIME_STEP=""
+DELTA_T=""
 PREDICTOR_MODE=""
 START_INJECT_TIME=""
 INJECT_EVERY_TIME_STEP=""
@@ -36,9 +38,16 @@ Usage:
     [--dataset-path <iterreduce_pilot_v1.h5>] \
     [--run-root <dir>] \
     [--end-time <scalar>] \
+    [--adjust-time-step <yes|no>] \
+    [--delta-t <scalar>] \
     [--predictor-mode <model|identity|random|bad_zero|bad_reverse>] \
     [--start-inject-time <scalar>] \
     [--inject-every-time-step <true|false>] \
+    [--macro-dt <scalar>] \
+    [--rollout-steps <int>] \
+    [--blend-mode <manual|dtScaled>] \
+    [--gnn-training-dt <scalar>] \
+    [--dt-scaled-alpha-max <scalar>] \
     [--random-scale <scalar>] \
     [--random-seed <int>] \
     [--export-device <cuda:N|cpu>] \
@@ -52,7 +61,10 @@ ensure_runtime_env() {
     return
   fi
 
-  if [[ -f "${ROOT_DIR}/setup_env.sh" ]]; then
+  if [[ -f "${ROOT_DIR}/gnn_preconditioner/setup_env.sh" ]]; then
+    # shellcheck source=/dev/null
+    source "${ROOT_DIR}/gnn_preconditioner/setup_env.sh" --runtime-only >/dev/null 2>&1 || true
+  elif [[ -f "${ROOT_DIR}/setup_env.sh" ]]; then
     # shellcheck source=/dev/null
     source "${ROOT_DIR}/setup_env.sh" --runtime-only >/dev/null 2>&1 || true
   fi
@@ -101,6 +113,8 @@ while [[ $# -gt 0 ]]; do
     --trajectory-key) TRAJECTORY_KEY="$2"; shift 2 ;;
     --run-root) RUN_ROOT="$2"; shift 2 ;;
     --end-time) END_TIME="$2"; shift 2 ;;
+    --adjust-time-step) ADJUST_TIME_STEP="$2"; shift 2 ;;
+    --delta-t) DELTA_T="$2"; shift 2 ;;
     --predictor-mode) PREDICTOR_MODE="$2"; shift 2 ;;
     --start-inject-time) START_INJECT_TIME="$2"; shift 2 ;;
     --inject-every-time-step) INJECT_EVERY_TIME_STEP="$2"; shift 2 ;;
@@ -153,6 +167,12 @@ apply_run_controls() {
   fi
   if [[ -n "${END_TIME}" ]]; then
     foamDictionary -case "${case_path}" system/controlDict -entry endTime -set "${END_TIME}" >/dev/null
+  fi
+  if [[ -n "${ADJUST_TIME_STEP}" ]]; then
+    foamDictionary -case "${case_path}" system/controlDict -entry adjustTimeStep -set "${ADJUST_TIME_STEP}" >/dev/null
+  fi
+  if [[ -n "${DELTA_T}" ]]; then
+    foamDictionary -case "${case_path}" system/controlDict -entry deltaT -set "${DELTA_T}" >/dev/null
   fi
   if [[ -n "${runtime_predictor_mode}" ]]; then
     foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry predictorMode -set "${runtime_predictor_mode}" >/dev/null
@@ -258,6 +278,8 @@ from pathlib import Path
 
 run_root = Path(${RUN_ROOT@Q})
 end_time = ${END_TIME@Q}
+adjust_time_step = ${ADJUST_TIME_STEP@Q}
+delta_t = ${DELTA_T@Q}
 predictor_mode = ${PREDICTOR_MODE@Q}
 start_inject_time = ${START_INJECT_TIME@Q}
 inject_every_time_step = ${INJECT_EVERY_TIME_STEP@Q}
@@ -344,6 +366,8 @@ metrics = {
     "dataset_path": ${DATASET_PATH@Q},
     "run_root": str(run_root),
     "end_time": end_time or None,
+    "adjust_time_step": adjust_time_step or None,
+    "delta_t": delta_t or None,
     "predictor_mode": predictor_mode or "model",
     "start_inject_time": start_inject_time or None,
     "inject_every_time_step": inject_every_time_step or None,

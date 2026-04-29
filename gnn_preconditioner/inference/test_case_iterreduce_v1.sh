@@ -9,6 +9,8 @@ DATASET_PATH="${ROOT_DIR}/gnn_preconditioner/data_generation/datasets/iterreduce
 CHECKPOINT_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/pilot_v1_h100/best_model.pt"
 STATS_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/pilot_v1_h100/stats.json"
 END_TIME="0.1"
+ADJUST_TIME_STEP=""
+DELTA_T=""
 CASE_ID=""
 CASE_DIR=""
 RUN_ROOT=""
@@ -40,10 +42,18 @@ Options:
   --checkpoint-path <path>  Override best_model.pt
   --stats-path <path>       Override stats.json
   --end-time <scalar>       Benchmark end time (default: ${END_TIME})
+  --adjust-time-step <yes|no>
+                            Override adjustTimeStep in system/controlDict
+  --delta-t <scalar>        Override deltaT in system/controlDict
   --predictor-mode <mode>   IterReduce predictor mode: model, identity, random, bad_zero, or bad_reverse (default: ${PREDICTOR_MODE})
   --start-inject-time <t>   Override startInjectTime in iterReduceCouplingDict
   --inject-every-time-step <true|false>
                             Override injectEveryTimeStep in iterReduceCouplingDict
+  --macro-dt <scalar>       Override macroDt in iterReduceCouplingDict
+  --rollout-steps <int>     Export TorchScript with internal rollout steps
+  --blend-mode <mode>       manual or dtScaled
+  --gnn-training-dt <t>     Denominator for dtScaled alphaEff
+  --dt-scaled-alpha-max <a> Cap for dtScaled alphaEff
   --random-scale <scalar>   Random mode noise scale in target-std units (default: ${RANDOM_SCALE})
   --random-seed <int>       Random mode seed (default: ${RANDOM_SEED})
   --run-root <path>         Explicit output run root
@@ -63,6 +73,8 @@ while [[ $# -gt 0 ]]; do
     --checkpoint-path) CHECKPOINT_PATH="$2"; shift 2 ;;
     --stats-path) STATS_PATH="$2"; shift 2 ;;
     --end-time) END_TIME="$2"; shift 2 ;;
+    --adjust-time-step) ADJUST_TIME_STEP="$2"; shift 2 ;;
+    --delta-t) DELTA_T="$2"; shift 2 ;;
     --predictor-mode) PREDICTOR_MODE="$2"; shift 2 ;;
     --start-inject-time) START_INJECT_TIME="$2"; shift 2 ;;
     --inject-every-time-step) INJECT_EVERY_TIME_STEP="$2"; shift 2 ;;
@@ -143,6 +155,12 @@ echo "[gnn_preconditioner] trajectory key: ${TRAJECTORY_KEY}"
 echo "[gnn_preconditioner] checkpoint: ${CHECKPOINT_PATH}"
 echo "[gnn_preconditioner] stats: ${STATS_PATH}"
 echo "[gnn_preconditioner] endTime: ${END_TIME}"
+if [[ -n "${ADJUST_TIME_STEP}" ]]; then
+  echo "[gnn_preconditioner] adjustTimeStep: ${ADJUST_TIME_STEP}"
+fi
+if [[ -n "${DELTA_T}" ]]; then
+  echo "[gnn_preconditioner] deltaT: ${DELTA_T}"
+fi
 echo "[gnn_preconditioner] predictorMode: ${PREDICTOR_MODE}"
 if [[ -n "${START_INJECT_TIME}" ]]; then
   echo "[gnn_preconditioner] startInjectTime: ${START_INJECT_TIME}"
@@ -168,6 +186,12 @@ CMD=(
   --predictor-mode "${PREDICTOR_MODE}"
 )
 
+if [[ -n "${ADJUST_TIME_STEP}" ]]; then
+  CMD+=(--adjust-time-step "${ADJUST_TIME_STEP}")
+fi
+if [[ -n "${DELTA_T}" ]]; then
+  CMD+=(--delta-t "${DELTA_T}")
+fi
 if [[ -n "${START_INJECT_TIME}" ]]; then
   CMD+=(--start-inject-time "${START_INJECT_TIME}")
 fi
