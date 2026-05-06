@@ -41,48 +41,43 @@ class IterReduceInferenceModule(nn.Module):
         self.model = model.eval()
         self.apply_default_boundary_constraints = bool(apply_default_boundary_constraints)
         self.rollout_steps = int(rollout_steps)
-        self.register_buffer("node_positions", node_positions)
-        self.register_buffer("cell_volumes", cell_volumes)
         self.register_buffer("boundary_mask", boundary_mask)
         self.register_buffer("edge_index", edge_index)
         self.register_buffer("edge_attr", normalizer.normalize(edge_attr_raw, Normalizer.KEY_EDGE))
+        self.register_buffer("vol_norm", normalizer.normalize(cell_volumes, Normalizer.KEY_CELL_VOLUME))
+        self.register_buffer("pos_norm", normalizer.normalize(node_positions, Normalizer.KEY_POS))
         self.register_buffer("u_mean", torch.tensor(normalizer.stats[Normalizer.KEY_U_XY]["mean"], dtype=torch.float32))
         self.register_buffer("u_std", torch.tensor(normalizer.stats[Normalizer.KEY_U_XY]["std"], dtype=torch.float32))
         self.register_buffer("p_mean", torch.tensor(normalizer.stats[Normalizer.KEY_P_GAUGE]["mean"], dtype=torch.float32))
         self.register_buffer("p_std", torch.tensor(normalizer.stats[Normalizer.KEY_P_GAUGE]["std"], dtype=torch.float32))
-        self.register_buffer("vol_mean", torch.tensor(normalizer.stats[Normalizer.KEY_CELL_VOLUME]["mean"], dtype=torch.float32))
-        self.register_buffer("vol_std", torch.tensor(normalizer.stats[Normalizer.KEY_CELL_VOLUME]["std"], dtype=torch.float32))
         self.register_buffer("uin_mean", torch.tensor(normalizer.stats[Normalizer.KEY_UINLET]["mean"], dtype=torch.float32))
         self.register_buffer("uin_std", torch.tensor(normalizer.stats[Normalizer.KEY_UINLET]["std"], dtype=torch.float32))
-        self.register_buffer("pos_mean", torch.tensor(normalizer.stats[Normalizer.KEY_POS]["mean"], dtype=torch.float32))
-        self.register_buffer("pos_std", torch.tensor(normalizer.stats[Normalizer.KEY_POS]["std"], dtype=torch.float32))
         self.register_buffer("du_mean", torch.tensor(normalizer.stats[Normalizer.KEY_TARGET_DU]["mean"], dtype=torch.float32))
         self.register_buffer("du_std", torch.tensor(normalizer.stats[Normalizer.KEY_TARGET_DU]["std"], dtype=torch.float32))
         self.register_buffer("dp_mean", torch.tensor(normalizer.stats[Normalizer.KEY_TARGET_DP]["mean"], dtype=torch.float32))
         self.register_buffer("dp_std", torch.tensor(normalizer.stats[Normalizer.KEY_TARGET_DP]["std"], dtype=torch.float32))
         velocity_hold_mask, pressure_hold_mask = boundary_hold_masks(boundary_mask)
-        self.register_buffer("velocity_hold_mask", velocity_hold_mask)
-        self.register_buffer("pressure_hold_mask", pressure_hold_mask)
+        self.register_buffer("velocity_hold_mask", velocity_hold_mask.unsqueeze(-1))
+        self.register_buffer("pressure_hold_mask", pressure_hold_mask.unsqueeze(-1))
 
     def forward(self, u_xy_t: torch.Tensor, p_gauge_t: torch.Tensor, u_inlet: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        vol_norm = (self.cell_volumes - self.vol_mean) / self.vol_std
-        pos_norm = (self.node_positions - self.pos_mean) / self.pos_std
-        inlet = u_inlet.reshape(1).expand(self.node_positions.shape[0], 1)
+        inlet = u_inlet.reshape(1).expand(self.boundary_mask.shape[0], 1)
         inlet_norm = (inlet - self.uin_mean) / self.uin_std
+        static_node_feat = torch.cat([self.boundary_mask, self.vol_norm, inlet_norm, self.pos_norm], dim=-1)
         u_cur = u_xy_t
         p_cur = p_gauge_t
         for _ in range(self.rollout_steps):
             u_norm = (u_cur - self.u_mean) / self.u_std
             p_norm = (p_cur - self.p_mean) / self.p_std
-            x = torch.cat([u_norm, p_norm, self.boundary_mask, vol_norm, inlet_norm, pos_norm], dim=-1)
+            x = torch.cat([u_norm, p_norm, static_node_feat], dim=-1)
             pred = self.model(x, self.edge_attr, self.edge_index)
             du = pred[:, :2] * self.du_std + self.du_mean
             dp = pred[:, 2:3] * self.dp_std + self.dp_mean
             u_next = u_cur + du
             p_next = p_cur + dp
             if self.apply_default_boundary_constraints:
-                u_next = torch.where(self.velocity_hold_mask.unsqueeze(-1), u_cur, u_next)
-                p_next = torch.where(self.pressure_hold_mask.unsqueeze(-1), p_cur, p_next)
+                u_next = torch.where(self.velocity_hold_mask, u_cur, u_next)
+                p_next = torch.where(self.pressure_hold_mask, p_cur, p_next)
             u_cur = u_next
             p_cur = p_next
         return u_cur, p_cur

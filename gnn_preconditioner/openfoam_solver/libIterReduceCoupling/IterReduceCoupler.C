@@ -494,6 +494,7 @@ bool IterReduceCoupler::inject
             inputs.emplace_back(pgDev);
             inputs.emplace_back(inletDev);
             const steady_clock::time_point tFwd0 = steady_clock::now();
+            torch::NoGradGuard noGrad;
             const auto out = runtime_->module.forward(inputs).toTuple();
             synchronizeIfCuda(runtime_->device);
             totalForwardWallTime_ += elapsedSeconds(tFwd0, steady_clock::now());
