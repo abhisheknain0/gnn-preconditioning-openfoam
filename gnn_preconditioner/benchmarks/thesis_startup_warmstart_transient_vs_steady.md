@@ -44,8 +44,8 @@ A careful thesis claim that fits the evidence is:
 ## Source Artifacts
 
 - Transient `case_011`:
-  - [abg_metrics_startup_rollout_iterreduce_v1.json](/work/<hpc-user>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/benchmarks/runs/case_011_startup_rollout_full_surface_state_hd128_0p1/abg_metrics_startup_rollout_iterreduce_v1.json)
+  - [abg_metrics_startup_rollout_iterreduce_v1.json](gnn_preconditioner/benchmarks/runs/case_011_startup_rollout_full_surface_state_hd128_0p1/abg_metrics_startup_rollout_iterreduce_v1.json)
 - Steady `case_011`:
-  - [abg_metrics_startup_rollout_iterreduce_v1.json](/work/<hpc-user>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/benchmarks/runs/case_011_startup_rollout_full_surface_state_hd128_steady/abg_metrics_startup_rollout_iterreduce_v1.json)
+  - [abg_metrics_startup_rollout_iterreduce_v1.json](gnn_preconditioner/benchmarks/runs/case_011_startup_rollout_full_surface_state_hd128_steady/abg_metrics_startup_rollout_iterreduce_v1.json)
 - Steady `case_018`:
-  - [abg_metrics_startup_rollout_iterreduce_v1.json](/work/<hpc-user>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/benchmarks/runs/case_018_startup_rollout_full_surface_state_hd128_steady/abg_metrics_startup_rollout_iterreduce_v1.json)
+  - [abg_metrics_startup_rollout_iterreduce_v1.json](gnn_preconditioner/benchmarks/runs/case_018_startup_rollout_full_surface_state_hd128_steady/abg_metrics_startup_rollout_iterreduce_v1.json)

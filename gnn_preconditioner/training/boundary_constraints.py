@@ -5,7 +5,7 @@ import torch
 
 def boundary_hold_masks(boundary_mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Match the legacy rollout/export behavior:
+    Match the established rollout/export behavior:
     - hold velocity on inlet and wall nodes
     - hold pressure on outlet nodes
     """

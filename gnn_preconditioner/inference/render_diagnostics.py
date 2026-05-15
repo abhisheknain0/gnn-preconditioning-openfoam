@@ -23,6 +23,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from gnn_preconditioner.training import config
 from gnn_preconditioner.training.boundary_constraints import apply_default_boundary_constraints as apply_boundary_constraints
 from gnn_preconditioner.training.dataset import load_static_graph_from_group
+from gnn_preconditioner.inference.case_paths import resolve_case_dir
 from gnn_preconditioner.training.model import MeshGraphNet
 from gnn_preconditioner.training.normalizer import Normalizer
 
@@ -360,15 +361,16 @@ def render_diagnostics(
 
     with h5py.File(dataset_path, "r") as f:
         g = f[trajectory_key]
-        source_case_path = Path(str(g.attrs["source_case_path"]))
-        if not source_case_path.exists():
-            repo_root = Path(__file__).resolve().parents[2]
-            parts = source_case_path.parts
-            if "cases" in parts:
-                idx = parts.index("cases")
-                candidate = repo_root / "gnn_preconditioner" / "data_generation" / Path(*parts[idx:])
-                if candidate.exists():
-                    source_case_path = candidate
+        case_id = g.attrs.get("case_id")
+        source_case_path = resolve_case_dir(
+            source_case_path=g.attrs.get("source_case_path"),
+            case_id=int(case_id) if case_id is not None else None,
+            required_files=("system/geometry.geo",),
+        )
+        if source_case_path is None:
+            raise FileNotFoundError(
+                "Could not resolve active case directory from HDF5 source_case_path/case_id"
+            )
         geo_path = source_case_path / "system" / "geometry.geo"
         polygon, segments = _bfs_polygon_and_segments(geo_path)
         static = load_static_graph_from_group(g, normalizer, device=device_obj)

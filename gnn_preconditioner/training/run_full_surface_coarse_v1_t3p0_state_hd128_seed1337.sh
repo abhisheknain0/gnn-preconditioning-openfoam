@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /work/<hpc-user>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner
-source setup_env.sh --runtime-only
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+cd "$REPO_ROOT"
+source gnn_preconditioner/setup_env.sh --runtime-only
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-1}"
 export PYTHONUNBUFFERED=1

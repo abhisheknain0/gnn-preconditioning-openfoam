@@ -12,8 +12,6 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ITERREDUCE_ROOT = PROJECT_ROOT / "gnn_preconditioner"
-LEGACY_DATASET_PATH = PROJECT_ROOT / "dataGeneration_OF" / "datasets" / "singleSet300_output.h5"
-LEGACY_CASE_ROOT = PROJECT_ROOT / "dataGeneration_OF" / "cases" / "singleSet300"
 DEFAULT_CASE_OUTPUT_ROOT = ITERREDUCE_ROOT / "data_generation" / "cases" / "pilot_v1"
 
 
@@ -49,7 +47,7 @@ class SourceCaseMeta:
     ymid: float
     ymax: float
     nu: float
-    legacy_case_dir: str | None
+    iterreduce_case_dir: str | None
 
     def canonical_case_name(self) -> str:
         return (
@@ -68,9 +66,14 @@ class SourceCaseMeta:
             "nu": self.nu,
             "canonical_case_name": self.canonical_case_name(),
         }
-        if self.legacy_case_dir is not None:
-            data["legacy_case_dir"] = self.legacy_case_dir
-        data["iterreduce_case_dir"] = str(DEFAULT_CASE_OUTPUT_ROOT / self.canonical_case_name())
+        if self.iterreduce_case_dir is not None:
+            data["iterreduce_case_dir"] = self.iterreduce_case_dir
+        else:
+            try:
+                case_root = DEFAULT_CASE_OUTPUT_ROOT.relative_to(PROJECT_ROOT)
+            except ValueError:
+                case_root = DEFAULT_CASE_OUTPUT_ROOT
+            data["iterreduce_case_dir"] = str(case_root / self.canonical_case_name())
         return data
 
 
@@ -117,7 +120,7 @@ class MeshProfile:
         }
 
 
-def resolve_legacy_case_dir(case_root: str | Path, case_id: int) -> Path | None:
+def resolve_case_dir(case_root: str | Path, case_id: int) -> Path | None:
     case_root = Path(case_root).expanduser().resolve()
     matches = sorted(case_root.glob(f"case_{case_id:03d}_*"))
     if not matches:
@@ -135,7 +138,14 @@ def load_source_case_meta(source_h5: str | Path, case_root: str | Path) -> list[
             if case_id is None:
                 continue
             grp = f[key]
-            legacy_case = resolve_legacy_case_dir(case_root, case_id)
+            case_dir = resolve_case_dir(case_root, case_id)
+            if case_dir is not None:
+                try:
+                    iterreduce_case_dir = str(case_dir.relative_to(PROJECT_ROOT))
+                except ValueError:
+                    iterreduce_case_dir = str(case_dir)
+            else:
+                iterreduce_case_dir = None
             rows.append(
                 SourceCaseMeta(
                     case_id=case_id,
@@ -145,7 +155,7 @@ def load_source_case_meta(source_h5: str | Path, case_root: str | Path) -> list[
                     ymid=float(np.asarray(grp["ymid"]).reshape(-1)[0]),
                     ymax=float(np.asarray(grp["ymax"]).reshape(-1)[0]),
                     nu=float(np.asarray(grp["nu"]).reshape(-1)[0]),
-                    legacy_case_dir=str(legacy_case) if legacy_case is not None else None,
+                    iterreduce_case_dir=iterreduce_case_dir,
                 )
             )
     return rows
@@ -159,3 +169,26 @@ def load_manifest(path: str | Path) -> list[dict[str, object]]:
     if not isinstance(data, list):
         raise ValueError(f"Manifest at {path} must be a list or {{'cases': [...]}}")
     return data
+
+
+def resolve_iterreduce_case_dir(case_root: str | Path, row: dict[str, object]) -> Path:
+    case_root = Path(case_root).expanduser()
+    canonical_name = str(row["canonical_case_name"])
+    canonical = (case_root / canonical_name).resolve()
+    if canonical.is_dir():
+        return canonical
+
+    explicit = row.get("iterreduce_case_dir")
+    if explicit is None:
+        return canonical
+
+    path = Path(str(explicit)).expanduser()
+    if path.is_absolute():
+        try:
+            path.relative_to(PROJECT_ROOT)
+        except ValueError:
+            return canonical
+        return path.resolve()
+    if path.parts and path.parts[0] == "gnn_preconditioner":
+        return (PROJECT_ROOT / path).resolve()
+    return (case_root / path).resolve()

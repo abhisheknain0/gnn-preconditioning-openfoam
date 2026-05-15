@@ -17,7 +17,8 @@ from pathlib import Path
 
 import torch
 
-sys.path.insert(0, "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 from gnn_preconditioner.inference.openfoam_fields import (
     read_openfoam_scalar_internal_field,
     read_openfoam_vector_internal_field,

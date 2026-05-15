@@ -10,7 +10,8 @@
 
 set -euo pipefail
 
-REPO_ROOT="<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "$REPO_ROOT"
 
 source gnn_preconditioner/setup_env.sh --runtime-only

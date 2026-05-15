@@ -15,10 +15,8 @@ import re
 from pathlib import Path
 from statistics import median
 
-BENCH = Path(
-    "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/"
-    "ma_gnn_pc/gnn_preconditioner/benchmarks/runs"
-)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+BENCH = PROJECT_ROOT / "gnn_preconditioner/benchmarks/runs"
 
 SWEEP_ROOTS = [
     BENCH / "macrodt_rerun_clean_20260417T222402Z",

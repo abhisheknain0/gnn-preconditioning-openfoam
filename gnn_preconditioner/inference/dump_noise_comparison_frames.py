@@ -18,6 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from gnn_preconditioner.training import config
 from gnn_preconditioner.training.dataset import load_static_graph_from_group
+from gnn_preconditioner.inference.case_paths import resolve_case_dir
 from gnn_preconditioner.training.model import MeshGraphNet
 from gnn_preconditioner.training.normalizer import Normalizer
 
@@ -102,7 +103,16 @@ def main() -> None:
         gt_p = np.asarray(g["pressure_gauge"][: args.rollout_steps + 1], dtype=np.float32)
         positions = np.asarray(g["surface_positions"] if "surface_positions" in g else g["cell_centers"],
                                dtype=np.float32)[:, :2]
-        source_case_path = Path(str(g.attrs["source_case_path"]))
+        case_id = g.attrs.get("case_id")
+        source_case_path = resolve_case_dir(
+            source_case_path=g.attrs.get("source_case_path"),
+            case_id=int(case_id) if case_id is not None else None,
+            required_files=("system/geometry.geo",),
+        )
+        if source_case_path is None:
+            raise FileNotFoundError(
+                "Could not resolve active case directory from HDF5 source_case_path/case_id"
+            )
         polygon = _bfs_polygon(source_case_path / "system" / "geometry.geo")
 
     b_vel, b_p = _rollout(args.baseline_ckpt, args.baseline_stats, args.dataset_path,

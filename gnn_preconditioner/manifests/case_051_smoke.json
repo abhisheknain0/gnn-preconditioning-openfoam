@@ -9,8 +9,7 @@
       "ymax": 0.029999999329447746,
       "nu": 1.4999999621068127e-05,
       "canonical_case_name": "case_051_U0.386_H0.0082_L0.0948",
-      "legacy_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/gnn_preconditioner/dataGeneration_OF/cases/singleSet300/case_051_U0.39_H0.82_L9.5",
-      "iterreduce_case_dir": "<cluster-workdir>/Abhishek/Thesis/Code/Simulator/ma_gnn_pc/gnn_preconditioner/data_generation/cases/pilot_v1/case_051_U0.386_H0.0082_L0.0948"
+      "iterreduce_case_dir": "gnn_preconditioner/data_generation/cases/pilot_v1/case_051_U0.386_H0.0082_L0.0948"
     }
   ]
 }

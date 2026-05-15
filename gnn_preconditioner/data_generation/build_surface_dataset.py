@@ -18,7 +18,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from gnn_preconditioner.inference.openfoam_fields import read_openfoam_scalar_internal_field, read_openfoam_vector_internal_field
 
-from gnn_preconditioner.data_generation.common import DEFAULT_CASE_OUTPUT_ROOT, load_manifest
+from gnn_preconditioner.data_generation.common import (
+    DEFAULT_CASE_OUTPUT_ROOT,
+    load_manifest,
+    resolve_iterreduce_case_dir,
+)
 from gnn_preconditioner.data_generation.mesh_utils import (
     collect_numeric_time_dirs,
     compute_internal_face_flux_xy,
@@ -44,16 +48,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _resolve_case_dir(case_root: Path, row: dict[str, object]) -> Path:
-    canonical = (case_root / str(row["canonical_case_name"])).resolve()
-    if canonical.is_dir():
-        return canonical
-    explicit = row.get("iterreduce_case_dir")
-    if explicit is not None:
-        path = Path(str(explicit))
-        if not path.is_absolute():
-            path = (case_root / path.name).resolve()
-        return path
-    return canonical
+    return resolve_iterreduce_case_dir(case_root, row)
 
 
 def _build_case_payload(task: dict[str, object]) -> dict[str, object]:

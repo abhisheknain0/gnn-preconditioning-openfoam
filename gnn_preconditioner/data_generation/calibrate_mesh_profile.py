@@ -25,8 +25,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--case-ids", type=int, nargs="+", required=True)
     parser.add_argument("--target-min-cells", type=int, required=True)
     parser.add_argument("--target-max-cells", type=int, required=True)
-    parser.add_argument("--source-h5", type=Path, default=Path("dataGeneration_OF/datasets/singleSet300_output.h5"))
-    parser.add_argument("--case-root", type=Path, default=Path("dataGeneration_OF/cases/singleSet300"))
+    parser.add_argument(
+        "--source-h5",
+        type=Path,
+        default=Path("gnn_preconditioner/data_generation/datasets/iterreduce_full_surface_coarse_v1_t3p0.h5"),
+    )
+    parser.add_argument(
+        "--case-root",
+        type=Path,
+        default=Path("gnn_preconditioner/data_generation/cases/full_surface_coarse_v1_t3p0"),
+    )
     parser.add_argument("--base-case-dir", type=Path, default=Path("gnn_preconditioner/data_generation/base"))
     parser.add_argument("--front-back-mode", type=str, default="empty")
     parser.add_argument("--write-profile", action="store_true", help="Overwrite --profile with the best in-band candidate")
