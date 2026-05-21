@@ -130,8 +130,14 @@ IterReduceCoupler::IterReduceCoupler(const fvMesh& mesh)
 :
     mesh_(mesh),
     enabled_(true),
+    injectAtInitialTime_(false),
     injectEveryTimeStep_(false),
+    applyVelocityGuess_(true),
     applyPressureGuess_(true),
+    correctBoundariesAfterInjection_(true),
+    refreshPhiAfterInjection_(false),
+    refreshUfAfterInjection_(false),
+    skipSmallUpdates_(true),
     preserveUz_(true),
     abortOnError_(true),
     logGuessDiagnostics_(true),
@@ -141,6 +147,8 @@ IterReduceCoupler::IterReduceCoupler(const fvMesh& mesh)
     guessBlendAlpha_(1.0),
     gnnTrainingDt_(0.01),
     dtScaledAlphaMax_(1.0),
+    minRelativeVelocityUpdate_(1e-7),
+    minRelativePressureUpdate_(1e-7),
     timeTol_(1e-9),
     nextInjectionTime_(0),
     lastInjectedTimeIndex_(-1),
@@ -191,14 +199,42 @@ void IterReduceCoupler::readControls()
 
     IOdictionary dict(io);
     enabled_ = dict.lookupOrDefault<bool>("enabled", enabled_);
+    injectAtInitialTime_ = dict.lookupOrDefault<bool>("injectAtInitialTime", injectAtInitialTime_);
     startInjectTime_ = dict.lookupOrDefault<scalar>("startInjectTime", startInjectTime_);
     injectEveryTimeStep_ = dict.lookupOrDefault<bool>("injectEveryTimeStep", injectEveryTimeStep_);
     macroDt_ = dict.lookupOrDefault<scalar>("macroDt", macroDt_);
     modelPath_ = dict.lookupOrDefault<fileName>("modelPath", modelPath_);
     contextDir_ = dict.lookupOrDefault<fileName>("contextDir", contextDir_);
+    applyVelocityGuess_ = dict.lookupOrDefault<bool>("applyVelocityGuess", applyVelocityGuess_);
     applyPressureGuess_ = dict.lookupOrDefault<bool>("applyPressureGuess", applyPressureGuess_);
+    correctBoundariesAfterInjection_ = dict.lookupOrDefault<bool>
+    (
+        "correctBoundariesAfterInjection",
+        correctBoundariesAfterInjection_
+    );
+    refreshPhiAfterInjection_ = dict.lookupOrDefault<bool>
+    (
+        "refreshPhiAfterInjection",
+        refreshPhiAfterInjection_
+    );
+    refreshUfAfterInjection_ = dict.lookupOrDefault<bool>
+    (
+        "refreshUfAfterInjection",
+        refreshUfAfterInjection_
+    );
+    skipSmallUpdates_ = dict.lookupOrDefault<bool>("skipSmallUpdates", skipSmallUpdates_);
     preserveUz_ = dict.lookupOrDefault<bool>("preserveUz", preserveUz_);
     guessBlendAlpha_ = dict.lookupOrDefault<scalar>("guessBlendAlpha", guessBlendAlpha_);
+    minRelativeVelocityUpdate_ = dict.lookupOrDefault<scalar>
+    (
+        "minRelativeVelocityUpdate",
+        minRelativeVelocityUpdate_
+    );
+    minRelativePressureUpdate_ = dict.lookupOrDefault<scalar>
+    (
+        "minRelativePressureUpdate",
+        minRelativePressureUpdate_
+    );
     pressureGaugeMode_ = dict.lookupOrDefault<word>("pressureGaugeMode", pressureGaugeMode_);
     abortOnError_ = dict.lookupOrDefault<bool>("abortOnError", abortOnError_);
     logGuessDiagnostics_ = dict.lookupOrDefault<bool>("logGuessDiagnostics", logGuessDiagnostics_);
@@ -211,6 +247,8 @@ void IterReduceCoupler::readControls()
     dtScaledAlphaMax_ = dict.lookupOrDefault<scalar>("dtScaledAlphaMax", dtScaledAlphaMax_);
     guessBlendAlpha_ = min(max(guessBlendAlpha_, scalar(0)), scalar(1));
     dtScaledAlphaMax_ = min(max(dtScaledAlphaMax_, scalar(0)), scalar(1));
+    minRelativeVelocityUpdate_ = max(minRelativeVelocityUpdate_, scalar(0));
+    minRelativePressureUpdate_ = max(minRelativePressureUpdate_, scalar(0));
 
     if (blendMode_ != "manual" && blendMode_ != "dtScaled")
     {
@@ -430,7 +468,7 @@ bool IterReduceCoupler::shouldInject(const scalar currentTime, const label timeI
 }
 
 
-bool IterReduceCoupler::inject
+IterReduceCoupler::InjectionOutcome IterReduceCoupler::inject
 (
     volVectorField& U,
     volScalarField& p,
@@ -438,54 +476,76 @@ bool IterReduceCoupler::inject
     const label timeIndex
 )
 {
+    InjectionOutcome outcome;
+
     if (!shouldInject(currentTime, timeIndex))
     {
-        return false;
+        return outcome;
+    }
+
+    outcome.scheduled = true;
+    const steady_clock::time_point tStart = steady_clock::now();
+
+    if (predictorMode_ == "identityNoop")
+    {
+        if (logGuessDiagnostics_)
+        {
+            Info<< "iterReduceCoupling: identityNoop"
+                << " time=" << currentTime
+                << " timeIndex=" << timeIndex
+                << nl;
+        }
+
+        lastInjectedTimeIndex_ = timeIndex;
+        ++numInjections_;
+        advanceNextInjectionTime(currentTime);
+        totalInjectWallTime_ += elapsedSeconds(tStart, steady_clock::now());
+        return outcome;
     }
 
     if (pressureGaugeMode_ != "mean")
     {
         handleError("Unsupported pressureGaugeMode; expected 'mean'");
-        return false;
+        return outcome;
     }
 
-    ensureRuntimeLoaded(U);
-    if (!runtimeLoaded_)
-    {
-        return false;
-    }
-
-    const steady_clock::time_point tStart = steady_clock::now();
     const vectorField Uprev(U.primitiveField());
     const scalarField pprev(p.primitiveField());
     const label nCells = Uprev.size();
     const scalar meanP = (nCells > 0 ? gSum(pprev)/scalar(nCells) : 0);
     const scalar inletUx = inferInletUx(U);
+    const bool identityMode = (predictorMode_ == "identity");
 
     torch::Tensor predUxyCpu;
     torch::Tensor predPgCpu;
 
-    try
+    if (!identityMode)
     {
-        const auto tensorOpts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU);
-        torch::Tensor uxyCpu = torch::empty({nCells, 2}, tensorOpts);
-        torch::Tensor pgCpu = torch::empty({nCells, 1}, tensorOpts);
-        float* uxyPtr = uxyCpu.data_ptr<float>();
-        float* pgPtr = pgCpu.data_ptr<float>();
-        forAll(Uprev, celli)
+        ensureRuntimeLoaded(U);
+        if (!runtimeLoaded_)
         {
-            uxyPtr[2*celli + 0] = float(Uprev[celli].x());
-            uxyPtr[2*celli + 1] = float(Uprev[celli].y());
-            pgPtr[celli] = float(pprev[celli] - meanP);
+            return outcome;
         }
 
-        if (predictorMode_ == "identity")
+        try
         {
-            predUxyCpu = uxyCpu;
-            predPgCpu = pgCpu;
-        }
-        else if (predictorMode_ == "model")
-        {
+            const auto tensorOpts = torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU);
+            torch::Tensor uxyCpu = torch::empty({nCells, 2}, tensorOpts);
+            torch::Tensor pgCpu = torch::empty({nCells, 1}, tensorOpts);
+            float* uxyPtr = uxyCpu.data_ptr<float>();
+            float* pgPtr = pgCpu.data_ptr<float>();
+            forAll(Uprev, celli)
+            {
+                uxyPtr[2*celli + 0] = float(Uprev[celli].x());
+                uxyPtr[2*celli + 1] = float(Uprev[celli].y());
+                pgPtr[celli] = float(pprev[celli] - meanP);
+            }
+
+            if (predictorMode_ != "model")
+            {
+                throw std::runtime_error("Unsupported predictorMode: " + std::string(predictorMode_.c_str()));
+            }
+
             torch::Tensor uxyDev = uxyCpu.to(runtime_->device);
             torch::Tensor pgDev = pgCpu.to(runtime_->device);
             torch::Tensor inletDev = torch::tensor({float(inletUx)}, torch::TensorOptions().dtype(torch::kFloat32).device(runtime_->device));
@@ -501,30 +561,26 @@ bool IterReduceCoupler::inject
             predUxyCpu = out->elements()[0].toTensor().to(torch::kCPU).to(torch::kFloat32).contiguous();
             predPgCpu = out->elements()[1].toTensor().to(torch::kCPU).to(torch::kFloat32).contiguous();
         }
-        else
+        catch (const std::exception& e)
         {
-            throw std::runtime_error("Unsupported predictorMode: " + std::string(predictorMode_.c_str()));
+            handleError("iterreduce forward/inference failure: " + string(e.what()));
+            return outcome;
+        }
+
+        if (label(predUxyCpu.size(0)) != nCells || label(predUxyCpu.size(1)) != 2)
+        {
+            handleError("TorchScript u_xy_guess shape does not match mesh cell count");
+            return outcome;
+        }
+        if (label(predPgCpu.size(0)) != nCells || label(predPgCpu.size(1)) != 1)
+        {
+            handleError("TorchScript p_gauge_guess shape does not match mesh cell count");
+            return outcome;
         }
     }
-    catch (const std::exception& e)
-    {
-        handleError("iterreduce forward/inference failure: " + string(e.what()));
-        return false;
-    }
 
-    if (label(predUxyCpu.size(0)) != nCells || label(predUxyCpu.size(1)) != 2)
-    {
-        handleError("TorchScript u_xy_guess shape does not match mesh cell count");
-        return false;
-    }
-    if (label(predPgCpu.size(0)) != nCells || label(predPgCpu.size(1)) != 1)
-    {
-        handleError("TorchScript p_gauge_guess shape does not match mesh cell count");
-        return false;
-    }
-
-    const float* predUPtr = predUxyCpu.data_ptr<float>();
-    const float* predPPtr = predPgCpu.data_ptr<float>();
+    const float* predUPtr = identityMode ? nullptr : predUxyCpu.data_ptr<float>();
+    const float* predPPtr = identityMode ? nullptr : predPgCpu.data_ptr<float>();
     vectorField& Ufld = U.primitiveFieldRef();
     scalarField& pfld = p.primitiveFieldRef();
 
@@ -540,54 +596,111 @@ bool IterReduceCoupler::inject
     scalar sumU2 = 0;
     scalar sumDP2 = 0;
     scalar sumP2 = 0;
-    forAll(Ufld, celli)
+    forAll(Uprev, celli)
     {
-        const scalar guessUx = scalar(predUPtr[2*celli + 0]);
-        const scalar guessUy = scalar(predUPtr[2*celli + 1]);
+        const scalar guessUx = identityMode ? Uprev[celli].x() : scalar(predUPtr[2*celli + 0]);
+        const scalar guessUy = identityMode ? Uprev[celli].y() : scalar(predUPtr[2*celli + 1]);
         const scalar outOfPlane = preserveUz_ ? Uprev[celli].z() : 0.0;
         const vector guessU(guessUx, guessUy, outOfPlane);
         const vector blendedU = (1.0 - alphaEff)*Uprev[celli] + alphaEff*guessU;
-        const scalar guessP = scalar(predPPtr[celli]) + meanP;
+        const scalar guessP = identityMode ? pprev[celli] : scalar(predPPtr[celli]) + meanP;
         const scalar blendedP = (1.0 - alphaEff)*pprev[celli] + alphaEff*guessP;
-        sumDU2 += magSqr(blendedU - Uprev[celli]);
+
+        if (applyVelocityGuess_)
+        {
+            sumDU2 += magSqr(blendedU - Uprev[celli]);
+        }
         sumU2 += magSqr(Uprev[celli]);
         if (applyPressureGuess_)
         {
             sumDP2 += sqr(blendedP - pprev[celli]);
             sumP2 += sqr(pprev[celli]);
-            pfld[celli] = blendedP;
         }
-        Ufld[celli] = blendedU;
     }
 
-    U.correctBoundaryConditions();
-    if (applyPressureGuess_)
+    const scalar dUNorm = sqrt(sumDU2);
+    const scalar uNorm = sqrt(sumU2);
+    const scalar dURel = (uNorm > SMALL) ? dUNorm/uNorm : dUNorm;
+    const scalar dPNorm = sqrt(sumDP2);
+    const scalar pNorm = sqrt(sumP2);
+    const scalar dPRel = (pNorm > SMALL) ? dPNorm/pNorm : dPNorm;
+
+    const bool writeVelocity =
+        applyVelocityGuess_
+     && (
+            !skipSmallUpdates_
+         || (
+                dUNorm > SMALL
+             && (uNorm <= SMALL || dURel > minRelativeVelocityUpdate_)
+            )
+        );
+    const bool writePressure =
+        applyPressureGuess_
+     && (
+            !skipSmallUpdates_
+         || (
+                dPNorm > SMALL
+             && (pNorm <= SMALL || dPRel > minRelativePressureUpdate_)
+            )
+        );
+
+    if (writeVelocity || writePressure)
     {
-        p.correctBoundaryConditions();
+        forAll(Ufld, celli)
+        {
+            const scalar guessUx = identityMode ? Uprev[celli].x() : scalar(predUPtr[2*celli + 0]);
+            const scalar guessUy = identityMode ? Uprev[celli].y() : scalar(predUPtr[2*celli + 1]);
+            const scalar outOfPlane = preserveUz_ ? Uprev[celli].z() : 0.0;
+            const vector guessU(guessUx, guessUy, outOfPlane);
+            const vector blendedU = (1.0 - alphaEff)*Uprev[celli] + alphaEff*guessU;
+            const scalar guessP = identityMode ? pprev[celli] : scalar(predPPtr[celli]) + meanP;
+            const scalar blendedP = (1.0 - alphaEff)*pprev[celli] + alphaEff*guessP;
+
+            if (writeVelocity)
+            {
+                Ufld[celli] = blendedU;
+            }
+            if (writePressure)
+            {
+                pfld[celli] = blendedP;
+            }
+        }
+
+        if (correctBoundariesAfterInjection_)
+        {
+            if (writeVelocity)
+            {
+                U.correctBoundaryConditions();
+            }
+            if (writePressure)
+            {
+                p.correctBoundaryConditions();
+            }
+        }
     }
 
     if (logGuessDiagnostics_)
     {
-        const scalar dUNorm = sqrt(sumDU2);
-        const scalar uNorm = sqrt(sumU2);
-        const scalar dURel = (uNorm > SMALL) ? dUNorm/uNorm : 0.0;
-
         Info<< "iterReduceCoupling: injected guess"
             << " time=" << currentTime
             << " timeIndex=" << timeIndex
+            << " predictorMode=" << predictorMode_
             << " blendMode=" << blendMode_
             << " dtOF=" << dtOF
             << " dtGNN=" << gnnTrainingDt_
             << " alphaEff=" << alphaEff
             << " inletUx=" << inletUx
+            << " applyU=" << applyVelocityGuess_
+            << " applyP=" << applyPressureGuess_
+            << " wroteU=" << writeVelocity
+            << " wroteP=" << writePressure
+            << " correctBC=" << correctBoundariesAfterInjection_
+            << " refreshPhi=" << (writeVelocity && refreshPhiAfterInjection_)
+            << " refreshUf=" << (writeVelocity && refreshUfAfterInjection_)
             << " ||dUxy||2=" << dUNorm
             << " dUxy_relL2=" << dURel;
         if (applyPressureGuess_)
         {
-            const scalar dPNorm = sqrt(sumDP2);
-            const scalar pNorm = sqrt(sumP2);
-            const scalar dPRel = (pNorm > SMALL) ? dPNorm/pNorm : 0.0;
-
             Info<< " ||dp||2=" << dPNorm
                 << " dp_relL2=" << dPRel
                 << " meanP_current=" << meanP;
@@ -597,11 +710,16 @@ bool IterReduceCoupler::inject
 
     dumpInjectionFields(U, p, Uprev, pprev, currentTime, timeIndex);
 
+    outcome.wroteVelocity = writeVelocity;
+    outcome.wrotePressure = writePressure;
+    outcome.refreshPhi = writeVelocity && refreshPhiAfterInjection_;
+    outcome.refreshUf = writeVelocity && refreshUfAfterInjection_;
+
     lastInjectedTimeIndex_ = timeIndex;
     ++numInjections_;
     advanceNextInjectionTime(currentTime);
     totalInjectWallTime_ += elapsedSeconds(tStart, steady_clock::now());
-    return true;
+    return outcome;
 }
 
 } // End namespace Foam

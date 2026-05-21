@@ -19,6 +19,7 @@ SKIP_COLD="false"
 LIST_CASES="false"
 PREDICTOR_MODE="model"
 START_INJECT_TIME=""
+INJECT_AT_INITIAL_TIME=""
 INJECT_EVERY_TIME_STEP=""
 MACRO_DT=""
 ROLLOUT_STEPS=""
@@ -47,6 +48,8 @@ Options:
   --delta-t <scalar>        Override deltaT in system/controlDict
   --predictor-mode <mode>   IterReduce predictor mode: model, identity, random, bad_zero, or bad_reverse (default: ${PREDICTOR_MODE})
   --start-inject-time <t>   Override startInjectTime in iterReduceCouplingDict
+  --inject-at-initial-time <true|false>
+                            Inject before OpenFOAM advances to first timestep
   --inject-every-time-step <true|false>
                             Override injectEveryTimeStep in iterReduceCouplingDict
   --macro-dt <scalar>       Override macroDt in iterReduceCouplingDict
@@ -77,6 +80,7 @@ while [[ $# -gt 0 ]]; do
     --delta-t) DELTA_T="$2"; shift 2 ;;
     --predictor-mode) PREDICTOR_MODE="$2"; shift 2 ;;
     --start-inject-time) START_INJECT_TIME="$2"; shift 2 ;;
+    --inject-at-initial-time) INJECT_AT_INITIAL_TIME="$2"; shift 2 ;;
     --inject-every-time-step) INJECT_EVERY_TIME_STEP="$2"; shift 2 ;;
     --macro-dt) MACRO_DT="$2"; shift 2 ;;
     --rollout-steps) ROLLOUT_STEPS="$2"; shift 2 ;;
@@ -165,6 +169,9 @@ echo "[gnn_preconditioner] predictorMode: ${PREDICTOR_MODE}"
 if [[ -n "${START_INJECT_TIME}" ]]; then
   echo "[gnn_preconditioner] startInjectTime: ${START_INJECT_TIME}"
 fi
+if [[ -n "${INJECT_AT_INITIAL_TIME}" ]]; then
+  echo "[gnn_preconditioner] injectAtInitialTime: ${INJECT_AT_INITIAL_TIME}"
+fi
 if [[ -n "${INJECT_EVERY_TIME_STEP}" ]]; then
   echo "[gnn_preconditioner] injectEveryTimeStep: ${INJECT_EVERY_TIME_STEP}"
 fi
@@ -194,6 +201,9 @@ if [[ -n "${DELTA_T}" ]]; then
 fi
 if [[ -n "${START_INJECT_TIME}" ]]; then
   CMD+=(--start-inject-time "${START_INJECT_TIME}")
+fi
+if [[ -n "${INJECT_AT_INITIAL_TIME}" ]]; then
+  CMD+=(--inject-at-initial-time "${INJECT_AT_INITIAL_TIME}")
 fi
 if [[ -n "${INJECT_EVERY_TIME_STEP}" ]]; then
   CMD+=(--inject-every-time-step "${INJECT_EVERY_TIME_STEP}")

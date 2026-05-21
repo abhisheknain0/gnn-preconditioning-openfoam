@@ -21,18 +21,83 @@ from gnn_preconditioner.data_generation.surface_prism import (
     infer_representation_from_group,
 )
 from gnn_preconditioner.training import config
-from gnn_preconditioner.training.dataset import build_directed_edge_graph, load_static_graph_from_group
+from gnn_preconditioner.training.dataset import (
+    build_directed_edge_graph,
+    load_static_graph_from_case_dir,
+    load_static_graph_from_group,
+)
 from gnn_preconditioner.training.normalizer import Normalizer
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case-dir", type=Path, required=True)
-    parser.add_argument("--dataset-path", type=Path, required=True)
-    parser.add_argument("--trajectory-key", type=str, required=True)
+    parser.add_argument("--dataset-path", type=Path, default=None)
+    parser.add_argument("--trajectory-key", type=str, default=None)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--representation",
+        choices=["auto", SURFACE_PRISM_REPRESENTATION, "volume"],
+        default=config.REPRESENTATION,
+    )
     parser.add_argument("--tolerance", type=float, default=1e-7)
     return parser.parse_args()
+
+
+def _static_only_normalizer(representation: str) -> Normalizer:
+    resolved = config.REPRESENTATION if representation == "auto" else representation
+    edge_dim = config.NUM_EDGE_INPUT if resolved == SURFACE_PRISM_REPRESENTATION else 8
+    pos_dim = 2 if resolved == SURFACE_PRISM_REPRESENTATION else 3
+    normalizer = Normalizer()
+    normalizer.stats = {
+        Normalizer.KEY_EDGE: {"mean": [0.0] * edge_dim, "std": [1.0] * edge_dim},
+        Normalizer.KEY_POS: {"mean": [0.0] * pos_dim, "std": [1.0] * pos_dim},
+        Normalizer.KEY_CELL_VOLUME: {"mean": [0.0], "std": [1.0]},
+        Normalizer.KEY_UINLET: {"mean": [0.0], "std": [1.0]},
+    }
+    return normalizer
+
+
+def _write_case_only_context(args: argparse.Namespace, static_case: dict[str, object], output_dir: Path) -> None:
+    representation = config.REPRESENTATION if args.representation == "auto" else args.representation
+    normalizer = _static_only_normalizer(representation)
+    static_graph = load_static_graph_from_case_dir(args.case_dir.expanduser().resolve(), normalizer, representation)
+    n_cells = int(static_case["cell_centers"].shape[0])  # type: ignore[index,union-attr]
+    meta = {
+        "case_dir": str(args.case_dir.expanduser().resolve()),
+        "dataset_path": None,
+        "trajectory_key": None,
+        "case_id": None,
+        "representation": representation,
+        "n_cells": n_cells,
+        "n_internal_faces": int(len(static_case["owner"])),  # type: ignore[arg-type]
+        "n_directed_edges": int(static_graph["edge_index"].shape[1]),  # type: ignore[index,union-attr]
+        "source": "case",
+        "tolerance": args.tolerance,
+    }
+
+    if representation == SURFACE_PRISM_REPRESENTATION:
+        torch.save(static_graph["positions"].cpu(), output_dir / "surface_positions.pt")  # type: ignore[union-attr]
+        torch.save(static_graph["boundary_mask"].cpu(), output_dir / "surface_boundary_mask.pt")  # type: ignore[union-attr]
+        torch.save(static_graph["front_owner_patch_order"].cpu(), output_dir / "front_owner_patch_order.pt")  # type: ignore[union-attr]
+        torch.save(static_graph["surface_patch_to_cell_order_perm"].cpu(), output_dir / "surface_patch_to_cell_order_perm.pt")  # type: ignore[union-attr]
+        torch.save(static_graph["surface_cell_to_patch_order_perm"].cpu(), output_dir / "surface_cell_to_patch_order_perm.pt")  # type: ignore[union-attr]
+        meta.update(
+            {
+                "front_face_count": int(static_graph["front_owner_patch_order"].numel()),  # type: ignore[union-attr]
+                "front_owner_unique_count": int(torch.unique(static_graph["front_owner_patch_order"]).numel()),  # type: ignore[arg-type]
+            }
+        )
+    else:
+        torch.save(static_graph["positions"].cpu(), output_dir / "cell_centers.pt")  # type: ignore[union-attr]
+        torch.save(static_graph["boundary_mask"].cpu(), output_dir / "boundary_mask.pt")  # type: ignore[union-attr]
+
+    torch.save(static_graph["edge_index"].cpu(), output_dir / "edge_index.pt")  # type: ignore[union-attr]
+    torch.save(static_graph["edge_attr_raw"].cpu(), output_dir / "edge_attr.pt")  # type: ignore[union-attr]
+    torch.save(torch.arange(n_cells, dtype=torch.long), output_dir / "cell_ids.pt")
+    torch.save(static_graph["cell_volumes"].cpu(), output_dir / "cell_volumes.pt")  # type: ignore[union-attr]
+    (output_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    print(json.dumps(meta, indent=2))
 
 
 def main() -> None:
@@ -42,6 +107,12 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     static_case = load_case_static_geometry(case_dir)
+    if args.dataset_path is None or args.trajectory_key is None:
+        if args.dataset_path is not None or args.trajectory_key is not None:
+            raise ValueError("--dataset-path and --trajectory-key must be provided together")
+        _write_case_only_context(args, static_case, output_dir)
+        return
+
     with h5py.File(args.dataset_path.expanduser().resolve(), "r") as f:
         g = f[args.trajectory_key]
         representation = infer_representation_from_group(g)

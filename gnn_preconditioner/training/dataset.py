@@ -15,8 +15,11 @@ from gnn_preconditioner.data_generation.surface_prism import (
     SURFACE_PRISM_REPRESENTATION,
     VOLUME_REPRESENTATION,
     build_surface_directed_edge_graph,
+    build_surface_prism_mapping,
+    collapse_boundary_mask_to_surface,
     infer_representation_from_group,
 )
+from gnn_preconditioner.data_generation.mesh_utils import load_case_static_geometry
 
 from .normalizer import Normalizer
 
@@ -105,6 +108,90 @@ def load_static_graph_from_group(
         out["surface_patch_to_cell_order_perm"] = _to_tensor(group["surface_patch_to_cell_order_perm"], torch.long, device=device)
         out["surface_cell_to_patch_order_perm"] = _to_tensor(group["surface_cell_to_patch_order_perm"], torch.long, device=device)
         out["front_owner_patch_order"] = _to_tensor(group["front_owner_patch_order"], torch.long, device=device)
+    return out
+
+
+def load_static_graph_from_case_dir(
+    case_dir: str | Path,
+    normalizer: Normalizer,
+    representation: str = "auto",
+    device: torch.device | None = None,
+) -> dict[str, torch.Tensor | float | str]:
+    """Build inference static graph features directly from an OpenFOAM case.
+
+    This is the standalone inference counterpart to ``load_static_graph_from_group``:
+    no HDF5 trajectory is needed. The returned tensor contract intentionally
+    matches the HDF5 loader so TorchScript export can use either source.
+    """
+    requested = config.REPRESENTATION if representation == "auto" else representation
+    if requested not in {SURFACE_PRISM_REPRESENTATION, VOLUME_REPRESENTATION}:
+        raise ValueError(f"Unsupported representation: {representation!r}")
+
+    static_case = load_case_static_geometry(Path(case_dir))
+    cell_volumes = static_case["cell_volumes"].to(torch.float32).unsqueeze(-1)  # type: ignore[union-attr]
+    owner = torch.tensor(static_case["owner"], dtype=torch.long)  # type: ignore[arg-type]
+    neighbour = torch.tensor(static_case["neighbour"], dtype=torch.long)  # type: ignore[arg-type]
+    sf_internal = static_case["Sf_internal"].to(torch.float32)  # type: ignore[union-attr]
+
+    out: dict[str, torch.Tensor | float | str]
+    if requested == SURFACE_PRISM_REPRESENTATION:
+        mapping = build_surface_prism_mapping(static_case)
+        positions = mapping.surface_positions_canonical[:, :2].to(torch.float32)
+        boundary_mask_np = collapse_boundary_mask_to_surface(static_case["boundary_mask"])  # type: ignore[arg-type]
+        boundary_mask = torch.tensor(boundary_mask_np, dtype=torch.float32)
+        edge_index, edge_attr_raw = build_surface_directed_edge_graph(positions, owner, neighbour, sf_internal)
+        out = {
+            "representation": SURFACE_PRISM_REPRESENTATION,
+            "surface_positions": positions,
+            "positions": positions,
+            "surface_boundary_mask": boundary_mask,
+            "boundary_mask": boundary_mask,
+            "front_owner_patch_order": mapping.front_owner_patch_order,
+            "surface_patch_to_cell_order_perm": mapping.patch_to_cell_order_perm,
+            "surface_cell_to_patch_order_perm": mapping.cell_to_patch_order_perm,
+        }
+    else:
+        positions = static_case["cell_centers"].to(torch.float32)  # type: ignore[union-attr]
+        boundary_mask = torch.tensor(static_case["boundary_mask"], dtype=torch.float32)  # type: ignore[arg-type]
+        edge_index, edge_attr_raw = build_directed_edge_graph(positions, owner, neighbour, sf_internal)
+        out = {
+            "representation": VOLUME_REPRESENTATION,
+            "cell_centers": positions,
+            "positions": positions,
+            "boundary_mask": boundary_mask,
+        }
+
+    edge_attr = normalizer.normalize(edge_attr_raw, Normalizer.KEY_EDGE)
+    pos_norm = normalizer.normalize(positions, Normalizer.KEY_POS)
+    vol_norm = normalizer.normalize(cell_volumes, Normalizer.KEY_CELL_VOLUME)
+
+    inlet_norm = normalizer.normalize(
+        torch.zeros((positions.shape[0], 1), dtype=torch.float32),
+        Normalizer.KEY_UINLET,
+    )
+    static_node_feat = torch.cat([boundary_mask, vol_norm, inlet_norm, pos_norm], dim=-1)
+
+    out.update(
+        {
+            "cell_volumes": cell_volumes,
+            "owner": owner,
+            "neighbour": neighbour,
+            "sf_internal": sf_internal,
+            "edge_index": edge_index,
+            "edge_attr_raw": edge_attr_raw,
+            "edge_attr": edge_attr,
+            "static_node_feat": static_node_feat,
+            "uinlet": 0.0,
+            "node_input_dim": int(static_node_feat.shape[1] + 3),
+            "edge_input_dim": int(edge_attr.shape[1]),
+        }
+    )
+
+    if device is not None:
+        moved: dict[str, torch.Tensor | float | str] = {}
+        for key, value in out.items():
+            moved[key] = value.to(device) if isinstance(value, torch.Tensor) else value
+        out = moved
     return out
 
 

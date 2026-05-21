@@ -16,7 +16,7 @@ Key decisions:
 Top-level layout:
 - `data_generation/`: manifests, base cases, mesh profiles, case generation, HDF5 build
 - `training/`: volume-state training stack
-- `inference/`: context build, benchmark runner, analysis
+- `inference/`: context build, active benchmark runners, OpenFOAM field I/O
 - `openfoam_solver/`: isolated runtime stack for the new method
 - `docs/`: schemas and design notes
 
@@ -94,3 +94,6 @@ boundary-assignment plot into `checkpoint_dir/eval/` by default.
 
 The case test wrapper accepts either `--case-id` or `--case-dir` and writes
 parsed benchmark metrics to `run_root/abg_metrics_iterreduce_v1.json`.
+
+Older diagnostic and 10-case convenience wrappers are archived under
+`gnn_preconditioner/inference/archive_pre_fresh_20260521/`.

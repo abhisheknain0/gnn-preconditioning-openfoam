@@ -53,6 +53,9 @@ def resolve_case_dir(
         if candidate in seen:
             continue
         seen.add(candidate)
-        if candidate.is_dir() and _required_files_exist(candidate, required_files):
-            return candidate
+        try:
+            if candidate.is_dir() and _required_files_exist(candidate, required_files):
+                return candidate
+        except OSError:
+            continue
     return None

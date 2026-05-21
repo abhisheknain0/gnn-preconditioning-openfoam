@@ -21,8 +21,14 @@ class IterReduceCoupler
     const fvMesh& mesh_;
 
     bool enabled_;
+    bool injectAtInitialTime_;
     bool injectEveryTimeStep_;
+    bool applyVelocityGuess_;
     bool applyPressureGuess_;
+    bool correctBoundariesAfterInjection_;
+    bool refreshPhiAfterInjection_;
+    bool refreshUfAfterInjection_;
+    bool skipSmallUpdates_;
     bool preserveUz_;
     bool abortOnError_;
     bool logGuessDiagnostics_;
@@ -32,6 +38,8 @@ class IterReduceCoupler
     scalar guessBlendAlpha_;
     scalar gnnTrainingDt_;
     scalar dtScaledAlphaMax_;
+    scalar minRelativeVelocityUpdate_;
+    scalar minRelativePressureUpdate_;
     scalar timeTol_;
     scalar nextInjectionTime_;
     label lastInjectedTimeIndex_;
@@ -52,6 +60,24 @@ class IterReduceCoupler
 
 public:
     class RuntimeData;
+
+    struct InjectionOutcome
+    {
+        bool scheduled;
+        bool wroteVelocity;
+        bool wrotePressure;
+        bool refreshPhi;
+        bool refreshUf;
+
+        InjectionOutcome()
+        :
+            scheduled(false),
+            wroteVelocity(false),
+            wrotePressure(false),
+            refreshPhi(false),
+            refreshUf(false)
+        {}
+    };
 
 private:
     mutable std::unique_ptr<RuntimeData> runtime_;
@@ -81,9 +107,14 @@ public:
         return enabled_;
     }
 
+    bool injectAtInitialTime() const
+    {
+        return injectAtInitialTime_;
+    }
+
     bool shouldInject(const scalar currentTime, const label timeIndex) const;
 
-    bool inject
+    InjectionOutcome inject
     (
         volVectorField& U,
         volScalarField& p,

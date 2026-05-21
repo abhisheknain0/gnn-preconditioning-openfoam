@@ -92,9 +92,9 @@ Training histories:
 
 Runtime benchmark JSON:
 
-- `gnn_preconditioner/benchmarks/runs/case_011_surface_coarse_solver_0p1/abg_metrics_iterreduce_v1.json`
-- `gnn_preconditioner/benchmarks/runs/case_051_surface_coarse_solver_0p1/abg_metrics_iterreduce_v1.json`
-- `gnn_preconditioner/benchmarks/runs/case_011_surface_coarse_stateonly_hd128_0p1_v2/abg_metrics_iterreduce_v1.json`
-- `gnn_preconditioner/benchmarks/runs/case_051_surface_coarse_stateonly_hd128_0p1_v2/abg_metrics_iterreduce_v1.json`
-- `gnn_preconditioner/benchmarks/runs/case_011_surface_coarse_stateonly_hd128_mp12_0p1_v2/abg_metrics_iterreduce_v1.json`
-- `gnn_preconditioner/benchmarks/runs/case_051_surface_coarse_stateonly_hd128_mp12_0p1_v2/abg_metrics_iterreduce_v1.json`
+- `gnn_preconditioner/benchmarks/runs/archive_pre_fresh_20260521/case_011_surface_coarse_solver_0p1/abg_metrics_iterreduce_v1.json`
+- `gnn_preconditioner/benchmarks/runs/archive_pre_fresh_20260521/case_051_surface_coarse_solver_0p1/abg_metrics_iterreduce_v1.json`
+- `gnn_preconditioner/benchmarks/runs/archive_pre_fresh_20260521/case_011_surface_coarse_stateonly_hd128_0p1_v2/abg_metrics_iterreduce_v1.json`
+- `gnn_preconditioner/benchmarks/runs/archive_pre_fresh_20260521/case_051_surface_coarse_stateonly_hd128_0p1_v2/abg_metrics_iterreduce_v1.json`
+- `gnn_preconditioner/benchmarks/runs/archive_pre_fresh_20260521/case_011_surface_coarse_stateonly_hd128_mp12_0p1_v2/abg_metrics_iterreduce_v1.json`
+- `gnn_preconditioner/benchmarks/runs/archive_pre_fresh_20260521/case_051_surface_coarse_stateonly_hd128_mp12_0p1_v2/abg_metrics_iterreduce_v1.json`

@@ -26,6 +26,8 @@ class SyntheticGuessInferenceModule(nn.Module):
         u_inlet: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         del u_inlet
+        if self.mode == "identity":
+            return u_xy_t, p_gauge_t
         if self.mode == "zero":
             return torch.zeros_like(u_xy_t), torch.zeros_like(p_gauge_t)
         if self.mode == "reverse":
@@ -37,7 +39,7 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-path", type=Path, required=True)
     parser.add_argument("--device", type=str, default="cpu")
-    parser.add_argument("--mode", choices=["zero", "reverse"], required=True)
+    parser.add_argument("--mode", choices=["identity", "zero", "reverse"], required=True)
     return parser.parse_args()
 
 

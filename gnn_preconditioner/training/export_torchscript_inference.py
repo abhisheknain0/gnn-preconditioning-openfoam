@@ -16,7 +16,11 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from gnn_preconditioner.training import config
 from gnn_preconditioner.training.boundary_constraints import boundary_hold_masks
-from gnn_preconditioner.training.dataset import load_static_graph_from_group
+from gnn_preconditioner.inference.openfoam_fields import (
+    read_openfoam_scalar_internal_field,
+    read_openfoam_vector_internal_field,
+)
+from gnn_preconditioner.training.dataset import load_static_graph_from_case_dir, load_static_graph_from_group
 from gnn_preconditioner.training.model import MeshGraphNet
 from gnn_preconditioner.training.normalizer import Normalizer
 
@@ -87,8 +91,19 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint-path", type=Path, required=True)
     parser.add_argument("--stats-path", type=Path, required=True)
+    parser.add_argument(
+        "--case-dir",
+        type=Path,
+        default=None,
+        help="Build static graph buffers directly from this OpenFOAM case instead of an HDF5 trajectory.",
+    )
     parser.add_argument("--dataset-path", type=Path, default=config.DATASET_PATH)
-    parser.add_argument("--trajectory-key", type=str, required=True)
+    parser.add_argument(
+        "--trajectory-key",
+        type=str,
+        default=None,
+        help="HDF5 trajectory key used by the legacy dataset-based export path.",
+    )
     parser.add_argument("--output-path", type=Path, required=True)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--hidden-dim", type=int, default=None)
@@ -130,18 +145,49 @@ def _resolve_checkpoint_config(args: argparse.Namespace) -> tuple[int, int]:
     return hidden_dim, message_passing_steps
 
 
+def _load_mesh_graph_net_state(model: MeshGraphNet, state_dict: dict[str, torch.Tensor]) -> str:
+    if any(key.startswith("gnn.") for key in state_dict):
+        gnn_state = {
+            key.removeprefix("gnn."): value
+            for key, value in state_dict.items()
+            if key.startswith("gnn.")
+        }
+        model.load_state_dict(gnn_state)
+        return "gnn_branch"
+    model.load_state_dict(state_dict)
+    return "mesh_graph_net"
+
+
 def main() -> None:
     args = _parse_args()
     device = torch.device(args.device)
     hidden_dim, message_passing_steps = _resolve_checkpoint_config(args)
     normalizer = Normalizer()
     normalizer.load(args.stats_path)
-    with h5py.File(args.dataset_path, "r") as f:
-        g = f[args.trajectory_key]
-        static = load_static_graph_from_group(g, normalizer, device=device)
-        velocity0 = torch.tensor(g["velocity_xy"][0], dtype=torch.float32, device=device)
-        pressure0 = torch.tensor(g["pressure_gauge"][0], dtype=torch.float32, device=device).unsqueeze(-1)
-        uinlet = float(g["Uinlet"][()][0])
+    if args.case_dir is not None:
+        static = load_static_graph_from_case_dir(
+            args.case_dir,
+            normalizer,
+            representation=args.representation,
+            device=device,
+        )
+        n_nodes = int(static["positions"].shape[0])  # type: ignore[index,union-attr]
+        u0 = read_openfoam_vector_internal_field(args.case_dir / "0" / "U", expected_size=n_nodes)
+        p0 = read_openfoam_scalar_internal_field(args.case_dir / "0" / "p", expected_size=n_nodes)
+        velocity0 = u0[:, :2].to(device)
+        pressure0 = (p0 - p0.mean()).unsqueeze(-1).to(device)
+        uinlet = 0.0
+        source = "case"
+    else:
+        if args.trajectory_key is None:
+            raise ValueError("--trajectory-key is required unless --case-dir is provided")
+        with h5py.File(args.dataset_path, "r") as f:
+            g = f[args.trajectory_key]
+            static = load_static_graph_from_group(g, normalizer, device=device)
+            velocity0 = torch.tensor(g["velocity_xy"][0], dtype=torch.float32, device=device)
+            pressure0 = torch.tensor(g["pressure_gauge"][0], dtype=torch.float32, device=device).unsqueeze(-1)
+            uinlet = float(g["Uinlet"][()][0])
+        source = "dataset"
     model = MeshGraphNet(
         input_dim_nodes=int(static["node_input_dim"]),
         input_dim_edges=int(static["edge_input_dim"]),
@@ -149,7 +195,7 @@ def main() -> None:
         num_mp_steps=message_passing_steps,
     ).to(device)
     ckpt = torch.load(args.checkpoint_path, map_location=device)
-    model.load_state_dict(ckpt["model_state"])
+    exported_state_source = _load_mesh_graph_net_state(model, ckpt["model_state"])
     wrapper = IterReduceInferenceModule(
         model,
         normalizer,
@@ -170,12 +216,16 @@ def main() -> None:
     args.output_path.parent.mkdir(parents=True, exist_ok=True)
     traced.save(str(args.output_path))
     meta = {
+        "source": source,
+        "case_dir": str(args.case_dir.resolve()) if args.case_dir is not None else None,
+        "dataset_path": str(args.dataset_path.resolve()) if args.case_dir is None else None,
         "trajectory_key": args.trajectory_key,
         "output_path": str(args.output_path.resolve()),
         "device": str(device),
         "representation": str(static["representation"]),
         "hidden_dim": int(hidden_dim),
         "message_passing_steps": int(message_passing_steps),
+        "exported_state_source": exported_state_source,
         "surface_edge_feature_mode": str(config.SURFACE_EDGE_FEATURE_MODE),
         "apply_default_boundary_constraints": bool(args.apply_default_boundary_constraints),
         "rollout_steps": int(args.rollout_steps),

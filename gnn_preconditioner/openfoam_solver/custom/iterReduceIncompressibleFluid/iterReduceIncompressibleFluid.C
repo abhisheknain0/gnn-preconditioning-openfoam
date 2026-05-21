@@ -25,26 +25,40 @@ Foam::solvers::iterReduceIncompressibleFluid::iterReduceIncompressibleFluid(fvMe
 :
     incompressibleFluidIterReduce(mesh),
     iterReduceCoupler_(mesh)
-{}
+{
+    injectInitialPredictorFields();
+}
 
 
 Foam::solvers::iterReduceIncompressibleFluid::~iterReduceIncompressibleFluid()
 {}
 
 
-void Foam::solvers::iterReduceIncompressibleFluid::refreshFluxStateAfterInjection()
+void Foam::solvers::iterReduceIncompressibleFluid::refreshFluxStateAfterInjection
+(
+    const bool refreshPhi,
+    const bool refreshUf
+)
 {
+    if (!refreshPhi && !refreshUf)
+    {
+        return;
+    }
+
     const scalarField phiPrev(phi_.primitiveField());
 
-    phi_ = linearInterpolate(U_) & mesh_.Sf();
+    if (refreshPhi)
+    {
+        phi_ = linearInterpolate(U_) & mesh_.Sf();
 
-    if (Uf.valid())
+        MRF.makeRelative(phi_);
+        fvc::makeRelative(phi_, U_);
+    }
+
+    if (refreshUf && Uf.valid())
     {
         Uf() = fvc::interpolate(U_);
     }
-
-    MRF.makeRelative(phi_);
-    fvc::makeRelative(phi_, U_);
 
     scalar sumDPhi2 = 0;
     scalar sumPhi2 = 0;
@@ -63,6 +77,8 @@ void Foam::solvers::iterReduceIncompressibleFluid::refreshFluxStateAfterInjectio
     const scalar dPhiRel = (phiNorm > SMALL) ? dPhiNorm/phiNorm : 0.0;
 
     Info<< "iterReduceCoupling: refreshed flux state"
+        << " refreshPhi=" << refreshPhi
+        << " refreshUf=" << refreshUf
         << " ||dphi||2=" << dPhiNorm
         << " dphi_relL2=" << dPhiRel
         << " dphi_max=" << maxDPhi
@@ -72,12 +88,39 @@ void Foam::solvers::iterReduceIncompressibleFluid::refreshFluxStateAfterInjectio
 
 bool Foam::solvers::iterReduceIncompressibleFluid::injectPredictorFields()
 {
-    const bool injected = iterReduceCoupler_.inject(U_, p_, runTime.value(), runTime.timeIndex());
-    if (injected)
+    const IterReduceCoupler::InjectionOutcome outcome =
+        iterReduceCoupler_.inject(U_, p_, runTime.value(), runTime.timeIndex());
+
+    if (outcome.refreshPhi || outcome.refreshUf)
     {
-        refreshFluxStateAfterInjection();
+        refreshFluxStateAfterInjection(outcome.refreshPhi, outcome.refreshUf);
     }
-    return injected;
+
+    return outcome.scheduled;
+}
+
+
+bool Foam::solvers::iterReduceIncompressibleFluid::injectInitialPredictorFields()
+{
+    if (!iterReduceCoupler_.injectAtInitialTime())
+    {
+        return false;
+    }
+
+    Info<< "iterReduceCoupling: initial injection check"
+        << " time=" << runTime.value()
+        << " timeIndex=" << runTime.timeIndex()
+        << nl;
+
+    const IterReduceCoupler::InjectionOutcome outcome =
+        iterReduceCoupler_.inject(U_, p_, runTime.value(), runTime.timeIndex());
+
+    if (outcome.refreshPhi || outcome.refreshUf)
+    {
+        refreshFluxStateAfterInjection(outcome.refreshPhi, outcome.refreshUf);
+    }
+
+    return outcome.scheduled;
 }
 
 

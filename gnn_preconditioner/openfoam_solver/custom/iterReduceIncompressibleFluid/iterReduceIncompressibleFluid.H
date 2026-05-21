@@ -34,8 +34,11 @@ public:
     bool injectPredictorFields();
 
 private:
-    //- Refresh flux state so the predictor step sees fields consistent with injected U/p
-    void refreshFluxStateAfterInjection();
+    //- Optional startup injection before OpenFOAM advances to the first time step.
+    bool injectInitialPredictorFields();
+
+    //- Optional ablation: refresh dependent face state after injected U.
+    void refreshFluxStateAfterInjection(const bool refreshPhi, const bool refreshUf);
 };
 
 } // End namespace solvers

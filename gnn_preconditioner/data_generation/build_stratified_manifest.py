@@ -25,6 +25,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--case-root", type=Path, required=True)
     parser.add_argument("--output-manifest", type=Path, required=True)
     parser.add_argument("--output-split", type=Path, required=True)
+    parser.add_argument(
+        "--output-holdout-manifest",
+        type=Path,
+        default=None,
+        help="Optional path for a redundant case-metadata JSON containing only test cases.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--num-cases", type=int, default=None, help="Default: use all available cases")
     parser.add_argument("--force-case-id", type=int, default=None)
@@ -175,9 +181,10 @@ def main() -> None:
     args.output_split.parent.mkdir(parents=True, exist_ok=True)
     args.output_manifest.write_text(json.dumps(selected, indent=2), encoding="utf-8")
     args.output_split.write_text(json.dumps(split, indent=2), encoding="utf-8")
-    holdout_path = args.output_split.with_name(f"{args.output_split.stem}_holdout_manifest.json")
     holdout_rows = [row for row in selected if row["trajectory_key"] in set(split["test"])]
-    holdout_path.write_text(json.dumps(holdout_rows, indent=2), encoding="utf-8")
+    if args.output_holdout_manifest is not None:
+        args.output_holdout_manifest.parent.mkdir(parents=True, exist_ok=True)
+        args.output_holdout_manifest.write_text(json.dumps(holdout_rows, indent=2), encoding="utf-8")
 
     summary = {
         "selected_count": len(selected),
@@ -187,7 +194,9 @@ def main() -> None:
         "forced_case_id": args.force_case_id,
         "output_manifest": str(args.output_manifest.resolve()),
         "output_split": str(args.output_split.resolve()),
-        "holdout_manifest": str(holdout_path.resolve()),
+        "output_holdout_manifest": str(args.output_holdout_manifest.resolve())
+        if args.output_holdout_manifest is not None
+        else None,
     }
     print(json.dumps(summary, indent=2))
 

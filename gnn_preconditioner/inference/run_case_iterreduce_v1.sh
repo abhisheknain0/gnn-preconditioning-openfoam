@@ -7,6 +7,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CASE_DIR=""
 CHECKPOINT_PATH=""
 STATS_PATH=""
+MODEL_KIND="gnn"
 DATASET_PATH="${ROOT_DIR}/gnn_preconditioner/data_generation/datasets/iterreduce_pilot_v1.h5"
 TRAJECTORY_KEY=""
 RUN_ROOT="${ROOT_DIR}/gnn_preconditioner/benchmarks/runs/$(date -u +%Y%m%dT%H%M%SZ)"
@@ -17,13 +18,24 @@ ADJUST_TIME_STEP=""
 DELTA_T=""
 PREDICTOR_MODE=""
 START_INJECT_TIME=""
+INJECT_AT_INITIAL_TIME=""
 INJECT_EVERY_TIME_STEP=""
 MACRO_DT=""
+APPLY_VELOCITY_GUESS=""
+APPLY_PRESSURE_GUESS=""
+CORRECT_BOUNDARIES_AFTER_INJECTION=""
+REFRESH_PHI_AFTER_INJECTION=""
+REFRESH_UF_AFTER_INJECTION=""
+SKIP_SMALL_UPDATES=""
+MIN_RELATIVE_VELOCITY_UPDATE=""
+MIN_RELATIVE_PRESSURE_UPDATE=""
 ROLLOUT_STEPS=""
 BLEND_MODE=""
 GNN_TRAINING_DT=""
 DT_SCALED_ALPHA_MAX=""
+CASE_STATIC_CONTEXT="false"
 EXPORT_DEVICE="${ITERREDUCE_EXPORT_DEVICE:-cuda:0}"
+RUNTIME_DEVICE=""
 RANDOM_SCALE="${ITERREDUCE_RANDOM_SCALE:-1.0}"
 RANDOM_SEED="${ITERREDUCE_RANDOM_SEED:-1234}"
 
@@ -34,16 +46,27 @@ Usage:
     --case-dir <case_dir> \
     --checkpoint-path <best_model.pt> \
     --stats-path <stats.json> \
-    --trajectory-key <trajectory_...> \
+    [--model-kind <gnn|hybrid>] \
+    [--trajectory-key <trajectory_...>] \
     [--dataset-path <iterreduce_pilot_v1.h5>] \
+    [--case-static-context] \
     [--run-root <dir>] \
     [--end-time <scalar>] \
     [--adjust-time-step <yes|no>] \
     [--delta-t <scalar>] \
-    [--predictor-mode <model|identity|random|bad_zero|bad_reverse>] \
+    [--predictor-mode <model|identity|identityNoop|identity_model|random|bad_zero|bad_reverse>] \
     [--start-inject-time <scalar>] \
+    [--inject-at-initial-time <true|false>] \
     [--inject-every-time-step <true|false>] \
     [--macro-dt <scalar>] \
+    [--apply-velocity-guess <true|false>] \
+    [--apply-pressure-guess <true|false>] \
+    [--correct-boundaries-after-injection <true|false>] \
+    [--refresh-phi-after-injection <true|false>] \
+    [--refresh-uf-after-injection <true|false>] \
+    [--skip-small-updates <true|false>] \
+    [--min-relative-velocity-update <scalar>] \
+    [--min-relative-pressure-update <scalar>] \
     [--rollout-steps <int>] \
     [--blend-mode <manual|dtScaled>] \
     [--gnn-training-dt <scalar>] \
@@ -51,6 +74,7 @@ Usage:
     [--random-scale <scalar>] \
     [--random-seed <int>] \
     [--export-device <cuda:N|cpu>] \
+    [--runtime-device <cuda:N|cpu>] \
     [--prepare-only] \
     [--skip-cold]
 USAGE
@@ -109,6 +133,7 @@ while [[ $# -gt 0 ]]; do
     --case-dir) CASE_DIR="$2"; shift 2 ;;
     --checkpoint-path) CHECKPOINT_PATH="$2"; shift 2 ;;
     --stats-path) STATS_PATH="$2"; shift 2 ;;
+    --model-kind) MODEL_KIND="$2"; shift 2 ;;
     --dataset-path) DATASET_PATH="$2"; shift 2 ;;
     --trajectory-key) TRAJECTORY_KEY="$2"; shift 2 ;;
     --run-root) RUN_ROOT="$2"; shift 2 ;;
@@ -117,15 +142,26 @@ while [[ $# -gt 0 ]]; do
     --delta-t) DELTA_T="$2"; shift 2 ;;
     --predictor-mode) PREDICTOR_MODE="$2"; shift 2 ;;
     --start-inject-time) START_INJECT_TIME="$2"; shift 2 ;;
+    --inject-at-initial-time) INJECT_AT_INITIAL_TIME="$2"; shift 2 ;;
     --inject-every-time-step) INJECT_EVERY_TIME_STEP="$2"; shift 2 ;;
     --macro-dt) MACRO_DT="$2"; shift 2 ;;
+    --apply-velocity-guess) APPLY_VELOCITY_GUESS="$2"; shift 2 ;;
+    --apply-pressure-guess) APPLY_PRESSURE_GUESS="$2"; shift 2 ;;
+    --correct-boundaries-after-injection) CORRECT_BOUNDARIES_AFTER_INJECTION="$2"; shift 2 ;;
+    --refresh-phi-after-injection) REFRESH_PHI_AFTER_INJECTION="$2"; shift 2 ;;
+    --refresh-uf-after-injection) REFRESH_UF_AFTER_INJECTION="$2"; shift 2 ;;
+    --skip-small-updates) SKIP_SMALL_UPDATES="$2"; shift 2 ;;
+    --min-relative-velocity-update) MIN_RELATIVE_VELOCITY_UPDATE="$2"; shift 2 ;;
+    --min-relative-pressure-update) MIN_RELATIVE_PRESSURE_UPDATE="$2"; shift 2 ;;
     --rollout-steps) ROLLOUT_STEPS="$2"; shift 2 ;;
     --blend-mode) BLEND_MODE="$2"; shift 2 ;;
     --gnn-training-dt) GNN_TRAINING_DT="$2"; shift 2 ;;
     --dt-scaled-alpha-max) DT_SCALED_ALPHA_MAX="$2"; shift 2 ;;
+    --case-static-context) CASE_STATIC_CONTEXT="true"; shift ;;
     --random-scale) RANDOM_SCALE="$2"; shift 2 ;;
     --random-seed) RANDOM_SEED="$2"; shift 2 ;;
     --export-device) EXPORT_DEVICE="$2"; shift 2 ;;
+    --runtime-device) RUNTIME_DEVICE="$2"; shift 2 ;;
     --prepare-only) PREPARE_ONLY="true"; shift ;;
     --skip-cold) SKIP_COLD="true"; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -133,7 +169,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${CASE_DIR}" || -z "${CHECKPOINT_PATH}" || -z "${STATS_PATH}" || -z "${TRAJECTORY_KEY}" ]]; then
+if [[ -z "${CASE_DIR}" || -z "${CHECKPOINT_PATH}" || -z "${STATS_PATH}" ]]; then
+  usage
+  exit 2
+fi
+if [[ "${MODEL_KIND}" != "gnn" && "${MODEL_KIND}" != "hybrid" ]]; then
+  echo "--model-kind must be one of: gnn, hybrid" >&2
+  exit 2
+fi
+if [[ "${CASE_STATIC_CONTEXT}" != "true" && -z "${TRAJECTORY_KEY}" ]]; then
   usage
   exit 2
 fi
@@ -162,7 +206,7 @@ clean_case_for_run() {
 apply_run_controls() {
   local case_path="$1"
   local runtime_predictor_mode="${PREDICTOR_MODE}"
-  if [[ "${runtime_predictor_mode}" == "random" || "${runtime_predictor_mode}" == bad_* ]]; then
+  if [[ "${runtime_predictor_mode}" == "random" || "${runtime_predictor_mode}" == "identity_model" || "${runtime_predictor_mode}" == bad_* ]]; then
     runtime_predictor_mode="model"
   fi
   if [[ -n "${END_TIME}" ]]; then
@@ -177,14 +221,53 @@ apply_run_controls() {
   if [[ -n "${runtime_predictor_mode}" ]]; then
     foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry predictorMode -set "${runtime_predictor_mode}" >/dev/null
   fi
+  if [[ -n "${RUNTIME_DEVICE}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry device -set "${RUNTIME_DEVICE}" >/dev/null
+  fi
   if [[ -n "${START_INJECT_TIME}" ]]; then
     foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry startInjectTime -set "${START_INJECT_TIME}" >/dev/null
+  fi
+  if [[ -n "${INJECT_AT_INITIAL_TIME}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry injectAtInitialTime -set "${INJECT_AT_INITIAL_TIME}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry injectAtInitialTime -set "${INJECT_AT_INITIAL_TIME}" >/dev/null
   fi
   if [[ -n "${INJECT_EVERY_TIME_STEP}" ]]; then
     foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry injectEveryTimeStep -set "${INJECT_EVERY_TIME_STEP}" >/dev/null
   fi
   if [[ -n "${MACRO_DT}" ]]; then
     foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry macroDt -set "${MACRO_DT}" >/dev/null
+  fi
+  if [[ -n "${APPLY_VELOCITY_GUESS}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry applyVelocityGuess -set "${APPLY_VELOCITY_GUESS}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry applyVelocityGuess -set "${APPLY_VELOCITY_GUESS}" >/dev/null
+  fi
+  if [[ -n "${APPLY_PRESSURE_GUESS}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry applyPressureGuess -set "${APPLY_PRESSURE_GUESS}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry applyPressureGuess -set "${APPLY_PRESSURE_GUESS}" >/dev/null
+  fi
+  if [[ -n "${CORRECT_BOUNDARIES_AFTER_INJECTION}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry correctBoundariesAfterInjection -set "${CORRECT_BOUNDARIES_AFTER_INJECTION}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry correctBoundariesAfterInjection -set "${CORRECT_BOUNDARIES_AFTER_INJECTION}" >/dev/null
+  fi
+  if [[ -n "${REFRESH_PHI_AFTER_INJECTION}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry refreshPhiAfterInjection -set "${REFRESH_PHI_AFTER_INJECTION}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry refreshPhiAfterInjection -set "${REFRESH_PHI_AFTER_INJECTION}" >/dev/null
+  fi
+  if [[ -n "${REFRESH_UF_AFTER_INJECTION}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry refreshUfAfterInjection -set "${REFRESH_UF_AFTER_INJECTION}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry refreshUfAfterInjection -set "${REFRESH_UF_AFTER_INJECTION}" >/dev/null
+  fi
+  if [[ -n "${SKIP_SMALL_UPDATES}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry skipSmallUpdates -set "${SKIP_SMALL_UPDATES}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry skipSmallUpdates -set "${SKIP_SMALL_UPDATES}" >/dev/null
+  fi
+  if [[ -n "${MIN_RELATIVE_VELOCITY_UPDATE}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry minRelativeVelocityUpdate -set "${MIN_RELATIVE_VELOCITY_UPDATE}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry minRelativeVelocityUpdate -set "${MIN_RELATIVE_VELOCITY_UPDATE}" >/dev/null
+  fi
+  if [[ -n "${MIN_RELATIVE_PRESSURE_UPDATE}" ]]; then
+    foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry minRelativePressureUpdate -set "${MIN_RELATIVE_PRESSURE_UPDATE}" -add >/dev/null 2>&1 || \
+      foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry minRelativePressureUpdate -set "${MIN_RELATIVE_PRESSURE_UPDATE}" >/dev/null
   fi
   if [[ -n "${BLEND_MODE}" ]]; then
     foamDictionary -case "${case_path}" system/iterReduceCouplingDict -entry blendMode -set "${BLEND_MODE}" -add >/dev/null 2>&1 || \
@@ -212,21 +295,48 @@ if [[ "${PREDICTOR_MODE}" == "random" ]]; then
     --random-scale "${RANDOM_SCALE}" \
     --seed "${RANDOM_SEED}" \
     --output-path "${PREP_CASE}/constant/iterreduce/model_inference.ts"
-elif [[ "${PREDICTOR_MODE}" == bad_* ]]; then
+elif [[ "${PREDICTOR_MODE}" == "identity_model" || "${PREDICTOR_MODE}" == bad_* ]]; then
+  SYNTHETIC_MODE="${PREDICTOR_MODE#bad_}"
+  if [[ "${PREDICTOR_MODE}" == "identity_model" ]]; then
+    SYNTHETIC_MODE="identity"
+  fi
   python3 "${ROOT_DIR}/gnn_preconditioner/training/export_synthetic_torchscript_inference.py" \
     --device "${EXPORT_DEVICE}" \
-    --mode "${PREDICTOR_MODE#bad_}" \
+    --mode "${SYNTHETIC_MODE}" \
     --output-path "${PREP_CASE}/constant/iterreduce/model_inference.ts"
+elif [[ "${MODEL_KIND}" == "hybrid" ]]; then
+  CHECKPOINT_DIR="$(cd "$(dirname "${CHECKPOINT_PATH}")" && pwd)"
+  CHECKPOINT_NAME="$(basename "${CHECKPOINT_PATH}")"
+  EXPORT_CMD=(
+    python3 "${ROOT_DIR}/gnn_preconditioner/experiments/m2_pinn_gnn/inference/export_hybrid_torchscript.py"
+    --checkpoint-dir "${CHECKPOINT_DIR}"
+    --checkpoint-name "${CHECKPOINT_NAME}"
+    --stats-path "${STATS_PATH}"
+    --device "${EXPORT_DEVICE}"
+    --output-path "${PREP_CASE}/constant/iterreduce/model_inference.ts"
+  )
+  if [[ "${CASE_STATIC_CONTEXT}" == "true" ]]; then
+    EXPORT_CMD+=(--case-dir "${PREP_CASE}")
+  else
+    EXPORT_CMD+=(--dataset-path "${DATASET_PATH}" --trajectory-key "${TRAJECTORY_KEY}")
+  fi
+  if [[ -n "${ROLLOUT_STEPS}" ]]; then
+    EXPORT_CMD+=(--rollout-steps "${ROLLOUT_STEPS}")
+  fi
+  "${EXPORT_CMD[@]}"
 else
   EXPORT_CMD=(
     python3 "${ROOT_DIR}/gnn_preconditioner/training/export_torchscript_inference.py"
     --checkpoint-path "${CHECKPOINT_PATH}"
     --stats-path "${STATS_PATH}"
-    --dataset-path "${DATASET_PATH}"
-    --trajectory-key "${TRAJECTORY_KEY}"
     --device "${EXPORT_DEVICE}"
     --output-path "${PREP_CASE}/constant/iterreduce/model_inference.ts"
   )
+  if [[ "${CASE_STATIC_CONTEXT}" == "true" ]]; then
+    EXPORT_CMD+=(--case-dir "${PREP_CASE}")
+  else
+    EXPORT_CMD+=(--dataset-path "${DATASET_PATH}" --trajectory-key "${TRAJECTORY_KEY}")
+  fi
   if [[ -n "${ROLLOUT_STEPS}" ]]; then
     EXPORT_CMD+=(--rollout-steps "${ROLLOUT_STEPS}")
   fi
@@ -234,11 +344,15 @@ else
 fi
 
 echo "[gnn_preconditioner] building runtime context"
-python3 "${ROOT_DIR}/gnn_preconditioner/inference/build_case_context.py" \
-  --case-dir "${PREP_CASE}" \
-  --dataset-path "${DATASET_PATH}" \
-  --trajectory-key "${TRAJECTORY_KEY}" \
+CONTEXT_CMD=(
+  python3 "${ROOT_DIR}/gnn_preconditioner/inference/build_case_context.py"
+  --case-dir "${PREP_CASE}"
   --output-dir "${PREP_CASE}/constant/iterreduce/context"
+)
+if [[ "${CASE_STATIC_CONTEXT}" != "true" ]]; then
+  CONTEXT_CMD+=(--dataset-path "${DATASET_PATH}" --trajectory-key "${TRAJECTORY_KEY}")
+fi
+"${CONTEXT_CMD[@]}"
 
 if [[ "${SKIP_COLD}" != "true" ]]; then
   echo "[gnn_preconditioner] running cold baseline"
@@ -282,7 +396,22 @@ adjust_time_step = ${ADJUST_TIME_STEP@Q}
 delta_t = ${DELTA_T@Q}
 predictor_mode = ${PREDICTOR_MODE@Q}
 start_inject_time = ${START_INJECT_TIME@Q}
+inject_at_initial_time = ${INJECT_AT_INITIAL_TIME@Q}
 inject_every_time_step = ${INJECT_EVERY_TIME_STEP@Q}
+macro_dt = ${MACRO_DT@Q}
+rollout_steps = ${ROLLOUT_STEPS@Q}
+blend_mode = ${BLEND_MODE@Q}
+gnn_training_dt = ${GNN_TRAINING_DT@Q}
+dt_scaled_alpha_max = ${DT_SCALED_ALPHA_MAX@Q}
+apply_velocity_guess = ${APPLY_VELOCITY_GUESS@Q}
+apply_pressure_guess = ${APPLY_PRESSURE_GUESS@Q}
+correct_boundaries_after_injection = ${CORRECT_BOUNDARIES_AFTER_INJECTION@Q}
+refresh_phi_after_injection = ${REFRESH_PHI_AFTER_INJECTION@Q}
+refresh_uf_after_injection = ${REFRESH_UF_AFTER_INJECTION@Q}
+skip_small_updates = ${SKIP_SMALL_UPDATES@Q}
+min_relative_velocity_update = ${MIN_RELATIVE_VELOCITY_UPDATE@Q}
+min_relative_pressure_update = ${MIN_RELATIVE_PRESSURE_UPDATE@Q}
+runtime_device_arg = ${RUNTIME_DEVICE@Q}
 
 def parse_log(path: Path):
     text = path.read_text()
@@ -363,6 +492,7 @@ metrics = {
     "trajectory_key": ${TRAJECTORY_KEY@Q},
     "checkpoint_path": ${CHECKPOINT_PATH@Q},
     "stats_path": ${STATS_PATH@Q},
+    "model_kind": ${MODEL_KIND@Q},
     "dataset_path": ${DATASET_PATH@Q},
     "run_root": str(run_root),
     "end_time": end_time or None,
@@ -370,7 +500,22 @@ metrics = {
     "delta_t": delta_t or None,
     "predictor_mode": predictor_mode or "model",
     "start_inject_time": start_inject_time or None,
+    "inject_at_initial_time": inject_at_initial_time or None,
     "inject_every_time_step": inject_every_time_step or None,
+    "macro_dt": macro_dt or None,
+    "rollout_steps": rollout_steps or None,
+    "blend_mode": blend_mode or None,
+    "gnn_training_dt": gnn_training_dt or None,
+    "dt_scaled_alpha_max": dt_scaled_alpha_max or None,
+    "apply_velocity_guess": apply_velocity_guess or None,
+    "apply_pressure_guess": apply_pressure_guess or None,
+    "correct_boundaries_after_injection": correct_boundaries_after_injection or None,
+    "refresh_phi_after_injection": refresh_phi_after_injection or None,
+    "refresh_uf_after_injection": refresh_uf_after_injection or None,
+    "skip_small_updates": skip_small_updates or None,
+    "min_relative_velocity_update": min_relative_velocity_update or None,
+    "min_relative_pressure_update": min_relative_pressure_update or None,
+    "runtime_device_arg": runtime_device_arg or None,
     "coldstart": cold,
     "iterreduce": iterreduce,
     "comparison": comparison,
