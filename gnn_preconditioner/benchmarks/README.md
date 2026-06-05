@@ -18,6 +18,7 @@ Current active benchmark evidence lives under:
 - `runs/preserve_flux_campaign_20260521T133930Z/`
 - `runs/preserve_flux_*_20260521T13*/`
 - `runs/thesis_fresh_30case_20260521/`
+- `runs/steady_noise0p05_r30_r100_30case_20260604T204110Z/` (noise-checkpoint steady control; §4.1.3 checkpoint-choice justification)
 
 Older raw run folders are archived in place under
 `runs/archive_pre_fresh_20260521/`. Use them only for historical audit or old
