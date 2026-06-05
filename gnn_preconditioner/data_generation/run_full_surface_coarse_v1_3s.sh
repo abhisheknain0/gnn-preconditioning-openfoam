@@ -79,7 +79,7 @@ if [[ -n "${MAX_CASES}" ]]; then
 fi
 echo "=========================================="
 
-source "${ROOT_DIR}/setup_env.sh" --runtime-only
+source "${ROOT_DIR}/gnn_preconditioner/setup_env.sh" --runtime-only
 
 if [[ "${RUN_GENERATE}" == "1" ]]; then
   GENERATE_CMD=(

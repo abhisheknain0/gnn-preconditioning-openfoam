@@ -66,7 +66,7 @@ if [[ -n "${MAX_CASES}" ]]; then
 fi
 echo "=========================================="
 
-source "${ROOT_DIR}/setup_env.sh" --runtime-only
+source "${ROOT_DIR}/gnn_preconditioner/setup_env.sh" --runtime-only
 
 CMD=(
   python3 gnn_preconditioner/data_generation/generate_cases_iterreduce.py
