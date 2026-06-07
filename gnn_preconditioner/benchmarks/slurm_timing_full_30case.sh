@@ -18,9 +18,15 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# Under SLURM the batch script is copied to a spool dir, so BASH_SOURCE/$0 point
+# there, not at the repo. sbatch is run from the repo root, so prefer SLURM_SUBMIT_DIR
+# (fall back to BASH_SOURCE for a plain local `bash ...` run).
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 cd "${REPO_ROOT}"
+if [[ ! -f gnn_preconditioner/setup_env.sh ]]; then
+  echo "ERROR: gnn_preconditioner/setup_env.sh not found under REPO_ROOT=${REPO_ROOT}; submit from the repo root." >&2
+  exit 1
+fi
 
 source gnn_preconditioner/setup_env.sh --runtime-only
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
