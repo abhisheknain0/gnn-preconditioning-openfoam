@@ -37,17 +37,18 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--representation",
-        choices=["auto", SURFACE_PRISM_REPRESENTATION, "volume"],
+        choices=["auto", SURFACE_PRISM_REPRESENTATION],
         default=config.REPRESENTATION,
     )
     parser.add_argument("--tolerance", type=float, default=1e-7)
     return parser.parse_args()
 
 
-def _static_only_normalizer(representation: str) -> Normalizer:
-    resolved = config.REPRESENTATION if representation == "auto" else representation
-    edge_dim = config.NUM_EDGE_INPUT if resolved == SURFACE_PRISM_REPRESENTATION else 8
-    pos_dim = 2 if resolved == SURFACE_PRISM_REPRESENTATION else 3
+def _static_only_normalizer() -> Normalizer:
+    # Surface-prism (legacy3) is the only representation in the current pipeline;
+    # the retired volume path used edge_dim 8 / pos_dim 3.
+    edge_dim = config.NUM_EDGE_INPUT
+    pos_dim = 2
     normalizer = Normalizer()
     normalizer.stats = {
         Normalizer.KEY_EDGE: {"mean": [0.0] * edge_dim, "std": [1.0] * edge_dim},
@@ -60,7 +61,7 @@ def _static_only_normalizer(representation: str) -> Normalizer:
 
 def _write_case_only_context(args: argparse.Namespace, static_case: dict[str, object], output_dir: Path) -> None:
     representation = config.REPRESENTATION if args.representation == "auto" else args.representation
-    normalizer = _static_only_normalizer(representation)
+    normalizer = _static_only_normalizer()
     static_graph = load_static_graph_from_case_dir(args.case_dir.expanduser().resolve(), normalizer, representation)
     n_cells = int(static_case["cell_centers"].shape[0])  # type: ignore[index,union-attr]
     meta = {
@@ -158,8 +159,8 @@ def main() -> None:
         raise ValueError("Dataset cell_ids are not identity-ordered")
 
     normalizer = Normalizer()
-    edge_dim = config.NUM_EDGE_INPUT if representation == SURFACE_PRISM_REPRESENTATION else 8
-    pos_dim = 2 if representation == SURFACE_PRISM_REPRESENTATION else 3
+    edge_dim = config.NUM_EDGE_INPUT
+    pos_dim = 2
     normalizer.stats = {
         Normalizer.KEY_EDGE: {"mean": [0.0] * edge_dim, "std": [1.0] * edge_dim},
         Normalizer.KEY_POS: {"mean": [0.0] * pos_dim, "std": [1.0] * pos_dim},

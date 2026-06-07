@@ -4,10 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-CASES_ROOT="${ROOT_DIR}/gnn_preconditioner/data_generation/cases/pilot_v1"
-DATASET_PATH="${ROOT_DIR}/gnn_preconditioner/data_generation/datasets/iterreduce_pilot_v1.h5"
-CHECKPOINT_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/pilot_v1_h100/best_model.pt"
-STATS_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/pilot_v1_h100/stats.json"
+# Defaults point at the current (full-data, surface_prism/legacy3) configuration.
+CASES_ROOT="${ROOT_DIR}/gnn_preconditioner/data_generation/cases/full_surface_coarse_v1_t3p0"
+DATASET_PATH="${ROOT_DIR}/gnn_preconditioner/data_generation/datasets/iterreduce_full_surface_coarse_v1_t3p0.h5"
+CHECKPOINT_PATH="${ROOT_DIR}/gnn_preconditioner/checkpoints/full_surface_coarse_v1_t3p0_state_hd128_seed1337_run1/best_model.pt"
+STATS_PATH=""   # default: sibling stats.json of the checkpoint (see below)
 END_TIME="0.1"
 ADJUST_TIME_STEP=""
 DELTA_T=""
@@ -97,6 +98,12 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown arg: $1" >&2; usage; exit 2 ;;
   esac
 done
+
+# Default the stats file to the checkpoint's own directory when not overridden,
+# so a single --checkpoint-path override "just works" for any model.
+if [[ -z "${STATS_PATH}" ]]; then
+  STATS_PATH="$(dirname "${CHECKPOINT_PATH}")/stats.json"
+fi
 
 if [[ "${LIST_CASES}" == "true" ]]; then
   ls "${CASES_ROOT}"

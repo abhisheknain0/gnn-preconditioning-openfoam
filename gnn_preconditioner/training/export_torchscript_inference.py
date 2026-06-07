@@ -110,7 +110,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--message-passing-steps", type=int, default=None)
     parser.add_argument(
         "--representation",
-        choices=["auto", "surface_prism", "volume"],
+        choices=["auto", "surface_prism"],
         default=config.REPRESENTATION,
     )
     parser.add_argument(
