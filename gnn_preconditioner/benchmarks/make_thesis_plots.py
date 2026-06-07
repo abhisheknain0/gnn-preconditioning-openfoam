@@ -36,25 +36,36 @@ IMG = REPO / "thesis/images"
 
 # --- shared palette + style --------------------------------------------------
 PALETTE = {
-    "primary": "#4C72B0",   # blue  - training, baseline, total iterations
-    "accent":  "#C44E52",   # red   - validation, noise, pressure iterations
-    "muted":   "#8C8C8C",   # grey  - context (learning rate, unselected bars)
-    "ok":      "#55A868",   # green - optional positive accent
+    "primary": "#2166AC",   # deep blue  - training, baseline, total iterations
+    "accent":  "#B2182B",   # deep red   - validation, noise, pressure iterations
+    "muted":   "#6E6E6E",   # grey       - context (learning rate, unselected bars)
+    "ok":      "#1B7837",   # deep green - positive accent
 }
 
 
 def apply_style():
     plt.rcParams.update({
-        "font.family": "DejaVu Sans",
+        "font.family": "sans-serif",
+        "font.sans-serif": ["Nimbus Sans", "Helvetica", "Arial", "DejaVu Sans"],
         "font.size": 10,
-        "axes.edgecolor": "#444444",
+        "axes.edgecolor": "#333333",
         "axes.linewidth": 0.8,
         "axes.grid": True,
+        "axes.grid.axis": "y",
         "axes.axisbelow": True,
-        "grid.alpha": 0.3,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.titlesize": 10,
+        "axes.titleweight": "bold",
+        "grid.color": "#222222",
+        "grid.alpha": 0.12,
         "grid.linewidth": 0.6,
-        "legend.framealpha": 0.95,
+        "legend.frameon": False,
         "legend.fontsize": 9,
+        "xtick.color": "#333333",
+        "ytick.color": "#333333",
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
         "savefig.dpi": 200,
         "savefig.bbox": "tight",
     })
@@ -87,6 +98,8 @@ def learning_curve():
     ax.set_xlim(0, 100)
 
     ax2 = ax.twinx()
+    ax2.spines["right"].set_visible(True)
+    ax2.spines["right"].set_color(PALETTE["muted"])
     ax2.plot(ep, lr, color=PALETTE["muted"], lw=1.1, ls="--", label="Learning rate")
     ax2.set_ylabel("Learning rate", color=PALETTE["muted"])
     ax2.tick_params(axis="y", labelcolor=PALETTE["muted"])
@@ -144,7 +157,7 @@ def noise_rollout_rmse():
         ax.set_title(title, fontsize=10)
         ax.set_xlabel("Rollout step")
         ax.set_xlim(1, n)
-        ax.grid(alpha=0.3)
+        ax.grid(True, axis="y", alpha=0.12)
     axes[0].set_ylabel("RMSE")
     axes[0].legend(loc="upper left")
     fig.tight_layout()
@@ -181,12 +194,10 @@ def results_summary():
     x = list(range(4))
     w = 0.38
     fig, ax = plt.subplots(figsize=(8.4, 4.6))
-    ax.axvspan(-0.5, 1.5, color="#f4d9d9", alpha=0.35, zorder=0)
-    ax.axvspan(1.5, 3.5, color="#d9ecdc", alpha=0.40, zorder=0)
     b1 = ax.bar([xi - w / 2 for xi in x], total, w, label="Total iterations",
-                color=PALETTE["primary"], edgecolor="black", linewidth=0.5, zorder=3)
+                color=PALETTE["primary"], linewidth=0, zorder=3)
     b2 = ax.bar([xi + w / 2 for xi in x], press, w, label="Pressure iterations",
-                color=PALETTE["accent"], edgecolor="black", linewidth=0.5, zorder=3)
+                color=PALETTE["accent"], linewidth=0, zorder=3)
     for bars in (b1, b2):
         for rr in bars:
             hh = rr.get_height()
@@ -200,10 +211,6 @@ def results_summary():
     ax.set_ylabel("Iteration change vs cold baseline (%)")
     ax.set_ylim(-32, 30)
     ax.grid(axis="y", zorder=0)
-    ax.text(0.5, 27, "repeated injection\n(regression)", ha="center", va="top",
-            fontsize=8.5, style="italic", color="#7a3a3a")
-    ax.text(2.5, -27, "steady initialization\n(improvement)", ha="center", va="bottom",
-            fontsize=8.5, style="italic", color="#2f5d39")
     ax.legend(loc="upper right")
     save(fig, "results_summary")
 
