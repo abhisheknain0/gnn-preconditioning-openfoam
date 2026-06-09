@@ -78,6 +78,38 @@ def save(fig, name):
     print("saved", out)
 
 
+# --- document-locked figure type scale --------------------------------------
+# A figure placed at on-page width W is scaled from its native PDF width, so its
+# text shrinks by scale = W / native_width. To land every figure on ONE rendered
+# type scale (matched to the 12pt body / ~11pt caption), each figure authors its
+# fonts at target / scale. COL_PT is the A4 text column (595.276 - 2*72). Pass the
+# figure's measured native PDF width (pt) and its on-page width fraction.
+COL_PT = 451.0
+RENDER = {"title": 11.0, "label": 10.0, "small": 9.0}  # rendered-pt targets
+_FS = 1.0  # per-figure factor (= 1 / placement-scale); set by match_fonts()
+
+
+def fs(pt):
+    """Author-space font size that renders at `pt` for the current figure."""
+    return pt * _FS
+
+
+def match_fonts(native_width_pt, onpage_frac=1.0):
+    """Set rcParams so this figure renders at the RENDER targets once placed at
+    `onpage_frac` of the column. Call after apply_style(), before plt.subplots()."""
+    global _FS
+    scale = (onpage_frac * COL_PT) / native_width_pt
+    _FS = 1.0 / scale
+    plt.rcParams.update({
+        "font.size":       fs(RENDER["label"]),
+        "axes.labelsize":  fs(RENDER["label"]),
+        "axes.titlesize":  fs(RENDER["title"]),
+        "legend.fontsize": fs(RENDER["small"]),
+        "xtick.labelsize": fs(RENDER["small"]),
+        "ytick.labelsize": fs(RENDER["small"]),
+    })
+
+
 # --- 1. learning curve -------------------------------------------------------
 def learning_curve():
     h = json.loads((CK / "full_surface_coarse_v1_t3p0_state_hd128_seed1337_run1"
@@ -88,6 +120,7 @@ def learning_curve():
     vep = [e["epoch"] for e in h if e.get("valid")]
     vloss = [e["valid"]["loss"] for e in h if e.get("valid")]
 
+    match_fonts(463.5, 1.0)  # placed at width=100% (native ~= column)
     fig, ax = plt.subplots(figsize=(6.4, 3.5))
     ax.plot(ep, train, color=PALETTE["primary"], lw=1.7, label="Training loss")
     ax.plot(vep, vloss, color=PALETTE["accent"], lw=1.4, marker="o", ms=3.5,
@@ -145,6 +178,7 @@ def noise_rollout_rmse():
                     / "comparison/rollout_comparison.json").read_text())
     n = len(r["baseline"]["vel_rmse_per_step_mean"])
     steps = np.arange(1, n + 1)
+    match_fonts(530.3, 1.0)  # placed at width=100%
     fig, axes = plt.subplots(1, 2, figsize=(7.4, 3.0))
     for ax, key, title in [(axes[0], "vel", "Velocity RMSE"),
                            (axes[1], "p", "Pressure RMSE")]:
@@ -154,7 +188,7 @@ def noise_rollout_rmse():
             s = np.array(r[src][f"{key}_rmse_per_step_std"])
             ax.plot(steps, m, color=color, lw=1.6, label=lab)
             ax.fill_between(steps, m - s, m + s, color=color, alpha=0.15, linewidth=0)
-        ax.set_title(title, fontsize=10)
+        ax.set_title(title, fontsize=fs(RENDER["title"]))
         ax.set_xlabel("Rollout step")
         ax.set_xlim(1, n)
         ax.grid(True, axis="y", alpha=0.12)
@@ -193,6 +227,7 @@ def results_summary():
 
     x = list(range(4))
     w = 0.38
+    match_fonts(519.0, 0.95)  # placed at width=95%
     fig, ax = plt.subplots(figsize=(8.4, 4.6))
     b1 = ax.bar([xi - w / 2 for xi in x], total, w, label="Total iterations",
                 color=PALETTE["primary"], linewidth=0, zorder=3)
@@ -204,10 +239,10 @@ def results_summary():
             ax.annotate(f"{hh:+.1f}", (rr.get_x() + rr.get_width() / 2, hh),
                         ha="center", va="bottom" if hh >= 0 else "top",
                         xytext=(0, 3 if hh >= 0 else -3), textcoords="offset points",
-                        fontsize=8.5, fontweight="bold")
+                        fontsize=fs(RENDER["small"]), fontweight="bold")
     ax.axhline(0, color="black", linewidth=1.0, zorder=4)
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, fontsize=9)
+    ax.set_xticklabels(labels, fontsize=fs(RENDER["small"]))
     ax.set_ylabel("Iteration change vs cold baseline (%)")
     ax.set_ylim(-32, 30)
     ax.grid(axis="y", zorder=0)
@@ -254,37 +289,38 @@ def domain_mesh_bc():
                         (xmid, 0), (xmid, ymid), (0, ymid)])
     blue, red, grey = PALETTE["primary"], PALETTE["accent"], PALETTE["muted"]
 
+    match_fonts(518.5, 0.90)  # placed at width=90%
     fig, ax = plt.subplots(figsize=(8.4, 1.8))
     ax.triplot(triang, color="#b9b9b9", lw=0.18)
     ax.plot(outline[:, 0], outline[:, 1], color="#333333", lw=1.0)
     ax.set_aspect("equal")
     ax.set_xlim(-0.055, 0.42)
     ax.set_ylim(-0.014, 0.052)
-    ax.set_xlabel("x [m]", fontsize=9)
-    ax.set_ylabel("y [m]", fontsize=9)
+    ax.set_xlabel("x [m]", fontsize=fs(RENDER["label"]))
+    ax.set_ylabel("y [m]", fontsize=fs(RENDER["label"]))
     ax.set_yticks([0, 0.03]); ax.set_xticks([0, 0.1, 0.2, 0.3, 0.4])
-    ax.tick_params(labelsize=8); ax.grid(False)
+    ax.tick_params(labelsize=fs(RENDER["small"])); ax.grid(False)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
 
     ax.annotate("inlet", xy=(0.001, (ymid + ymax) / 2), xytext=(0.055, ymax + 0.008),
-                ha="center", color=blue, fontsize=10, fontweight="bold",
+                ha="center", color=blue, fontsize=fs(RENDER["label"]), fontweight="bold",
                 arrowprops=dict(arrowstyle="-|>", color=blue, lw=1.2, mutation_scale=8))
     ax.annotate("Outlet", xy=(xmax - 0.001, ymax / 2), xytext=(xmax - 0.055, ymax + 0.008),
-                ha="center", color=red, fontsize=10, fontweight="bold",
+                ha="center", color=red, fontsize=fs(RENDER["label"]), fontweight="bold",
                 arrowprops=dict(arrowstyle="-|>", color=red, lw=1.2, mutation_scale=8))
     ax.annotate("fixedWalls", xy=(0.22, ymax), xytext=(0.22, ymax + 0.016),
-                ha="center", va="bottom", color=grey, fontsize=10, fontweight="bold",
+                ha="center", va="bottom", color=grey, fontsize=fs(RENDER["label"]), fontweight="bold",
                 arrowprops=dict(arrowstyle="-|>", color=grey, lw=1.2, mutation_scale=8))
     ax.annotate("", xy=(-0.032, 0), xytext=(-0.032, ymax),
                 arrowprops=dict(arrowstyle="<->", color="#444", lw=0.8, mutation_scale=6))
-    ax.text(-0.032, ymax + 0.003, "$y_{\\max}$", ha="center", va="bottom", fontsize=9)
+    ax.text(-0.032, ymax + 0.003, "$y_{\\max}$", ha="center", va="bottom", fontsize=fs(RENDER["small"]))
     ax.annotate("", xy=(-0.016, 0), xytext=(-0.016, ymid),
                 arrowprops=dict(arrowstyle="<->", color="#444", lw=0.8, mutation_scale=6))
-    ax.text(-0.016, ymid + 0.003, "$y_{\\mathrm{mid}}$", ha="center", va="bottom", fontsize=8.5)
+    ax.text(-0.016, ymid + 0.003, "$y_{\\mathrm{mid}}$", ha="center", va="bottom", fontsize=fs(RENDER["small"]))
     ax.annotate("", xy=(0, -0.0075), xytext=(xmid, -0.0075),
                 arrowprops=dict(arrowstyle="<->", color="#444", lw=0.8, mutation_scale=6))
-    ax.text(xmid / 2, -0.013, "$x_{\\mathrm{mid}}$", ha="center", va="top", fontsize=9)
+    ax.text(xmid / 2, -0.013, "$x_{\\mathrm{mid}}$", ha="center", va="top", fontsize=fs(RENDER["small"]))
     save(fig, "domain_mesh_bc")
 
 

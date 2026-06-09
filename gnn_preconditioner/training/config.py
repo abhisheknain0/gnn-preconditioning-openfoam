@@ -24,7 +24,16 @@ CHECKPOINT_DIR = Path(
 REPRESENTATION = "surface_prism"
 SURFACE_EDGE_FEATURE_MODE = "legacy3"
 
-NUM_NODE_INPUT = 10
+# Ablation toggle (Ingo's cell-center-position question, 2026-06-08): include the
+# absolute cell-center position as a static node feature. The edge relative
+# geometry (Δx, Δy, length) is unaffected either way. Turn off with the
+# environment variable INCLUDE_CELL_POSITION=0 to retrain without it.
+INCLUDE_CELL_POSITION = (
+    os.environ.get("INCLUDE_CELL_POSITION", "1").strip().lower()
+    not in ("0", "false", "no", "off")
+)
+
+NUM_NODE_INPUT = 10 if INCLUDE_CELL_POSITION else 8
 NUM_EDGE_INPUT = 3
 NUM_OUTPUT = 3
 

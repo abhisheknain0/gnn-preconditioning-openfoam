@@ -22,8 +22,26 @@ OUT = ROOT / "thesis" / "images" / "error_spectrum.pdf"
 COL = {"p": "#C44E52", "ux": "#4C72B0", "uy": "#55A868"}
 LAB = {"p": r"pressure $p$", "ux": r"velocity $u_x$", "uy": r"velocity $u_y$"}
 
+# Nimbus Sans (Helvetica clone) to match every other thesis figure, and a
+# document-locked type scale: text authored at target/scale renders at {11/10/9}pt
+# once placed at `frac` of the 451pt column (see thesis figure design system).
+_COL, RENDER = 451.0, {"title": 11.0, "label": 10.0, "small": 9.0}
+_SCALE = (0.98 * _COL) / 556.5  # error_spectrum placed at width=98%, native 556.5pt
+
+
+def fs(pt):
+    return pt / _SCALE
+
+
 plt.rcParams.update({
-    "font.size": 10, "font.family": "DejaVu Sans",
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Nimbus Sans", "Helvetica", "Arial", "DejaVu Sans"],
+    "font.size": fs(RENDER["label"]),
+    "axes.labelsize": fs(RENDER["label"]),
+    "axes.titlesize": fs(RENDER["title"]),
+    "legend.fontsize": fs(RENDER["small"]),
+    "xtick.labelsize": fs(RENDER["small"]),
+    "ytick.labelsize": fs(RENDER["small"]),
     "axes.spines.top": False, "axes.spines.right": False,
     "axes.grid": True, "grid.alpha": 0.25, "grid.linewidth": 0.5,
 })
@@ -42,19 +60,19 @@ def main():
         ax[0].loglog(kk, norm[c], color=COL[c], lw=2.0, label=LAB[c])
     ax[0].set_xlabel(r"wavenumber $k$ (radial bin)")
     ax[0].set_ylabel("normalised error power")
-    ax[0].set_title("(a) error power spectrum", loc="left", fontsize=10)
-    ax[0].legend(frameon=False, fontsize=9)
+    ax[0].set_title("(a) error power spectrum", loc="left", fontsize=fs(RENDER["title"]))
+    ax[0].legend(frameon=False, fontsize=fs(RENDER["small"]))
 
     for c in ["ux", "uy", "p"]:
         ax[1].semilogx(kk, np.cumsum(norm[c]), color=COL[c], lw=2.0, label=LAB[c])
     ax[1].set_xlabel(r"wavenumber $k$")
     ax[1].set_ylabel("cumulative power fraction")
     ax[1].set_ylim(0, 1.02)
-    ax[1].set_title("(b) cumulative error power", loc="left", fontsize=10)
+    ax[1].set_title("(b) cumulative error power", loc="left", fontsize=fs(RENDER["title"]))
     ctext = "spectral centroid   " + "    ".join(
         f"{LAB[c].split()[-1]} $k_c$={cen[c]['spectral_centroid']:.1f}" for c in ["p", "ux", "uy"]
     )
-    ax[1].text(0.03, 0.06, ctext, transform=ax[1].transAxes, fontsize=8, color="#555555")
+    ax[1].text(0.03, 0.06, ctext, transform=ax[1].transAxes, fontsize=fs(RENDER["small"]), color="#555555")
 
     fig.tight_layout()
     fig.savefig(OUT, bbox_inches="tight")

@@ -46,6 +46,27 @@ max_edge = edges.max(axis=1)
 edge_thresh = np.percentile(max_edge, 95) * 1.8
 triang.set_mask((~inside) | (max_edge > edge_thresh))
 
+# --- shared style + document-locked figure type scale -----------------------
+# Nimbus Sans (Helvetica clone) to match every other thesis figure, and text
+# authored at target/scale so it renders at the {11/10/9}pt type scale once the
+# figure is placed at `frac` of the 451pt column (see thesis figure design system).
+plt.rcParams.update({
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Nimbus Sans", "Helvetica", "Arial", "DejaVu Sans"],
+})
+_COL = 451.0
+RENDER = {"title": 11.0, "label": 10.0, "small": 9.0}
+_SCALE = 1.0
+
+
+def fs(pt):
+    return pt / _SCALE
+
+
+def set_scale(native_width_pt, frac=1.0):
+    global _SCALE
+    _SCALE = (frac * _COL) / native_width_pt
+
 
 def umag(vel):
     return np.linalg.norm(vel, axis=-1)
@@ -71,14 +92,15 @@ def make_triptych(cmap="turbo"):
               "GNN warm start  (100-step rollout)",
               "Converged solution  (reference)"]
     vmax = float(np.percentile(umag(gt[100]), 99.5))
+    set_scale(463.6, 1.0)  # placed at width=100%
     fig, axes = plt.subplots(3, 1, figsize=(7.2, 3.05))
     for ax, f, lab in zip(axes, fields, labels):
         tcf = draw(ax, f, 0.0, vmax, cmap)
-        ax.set_title(lab, fontsize=10, loc="left", pad=2)
+        ax.set_title(lab, fontsize=fs(RENDER["title"]), loc="left", pad=2)
     cbar = fig.colorbar(tcf, ax=axes, fraction=0.025, pad=0.012,
                         ticks=np.linspace(0, vmax, 5))
-    cbar.set_label("velocity magnitude  $|\\mathbf{u}|$  (m/s)", fontsize=9)
-    cbar.ax.tick_params(labelsize=8)
+    cbar.set_label("velocity magnitude  $|\\mathbf{u}|$  (m/s)", fontsize=fs(RENDER["label"]))
+    cbar.ax.tick_params(labelsize=fs(RENDER["small"]))
     out = IMG / "flow_triptych.pdf"
     fig.savefig(out, bbox_inches="tight", dpi=200)
     plt.close(fig)
@@ -91,18 +113,19 @@ def make_frame_strip(cmap="turbo", steps=(1, 100, 200)):
             ("Baseline", d["baseline_vel"]),
             ("Noise  $\\sigma$=0.05", d["noise_vel"])]
     vmax = float(np.percentile(umag(d["gt_vel"][100]), 99.5))
+    set_scale(558.6, 1.0)  # placed at width=100%
     fig, axes = plt.subplots(3, 3, figsize=(7.6, 1.75), constrained_layout=True)
     fig.set_constrained_layout_pads(hspace=0.0, wspace=0.0, h_pad=0.015, w_pad=0.02)
     for r, (rlabel, vel) in enumerate(rows):
         for c, s in enumerate(steps):
             tcf = draw(axes[r, c], umag(vel[s]), 0.0, vmax, cmap)
-        axes[r, 0].set_title(rlabel, loc="left", fontsize=9.5, pad=1)
+        axes[r, 0].set_title(rlabel, loc="left", fontsize=fs(RENDER["label"]), pad=1)
     for c, s in enumerate(steps):
-        axes[2, c].set_xlabel(f"step {s}", fontsize=9, labelpad=1)
+        axes[2, c].set_xlabel(f"step {s}", fontsize=fs(RENDER["small"]), labelpad=1)
     cbar = fig.colorbar(tcf, ax=axes, fraction=0.015, pad=0.012, aspect=28,
                         ticks=np.linspace(0, vmax, 5))
-    cbar.set_label("$|\\mathbf{u}|$  (m/s)", fontsize=8)
-    cbar.ax.tick_params(labelsize=7)
+    cbar.set_label("$|\\mathbf{u}|$  (m/s)", fontsize=fs(RENDER["small"]))
+    cbar.ax.tick_params(labelsize=fs(RENDER["small"]))
     out = IMG / "noise_frame_strip.pdf"
     fig.savefig(out, bbox_inches="tight", dpi=200)
     plt.close(fig)

@@ -82,7 +82,10 @@ def load_static_graph_from_group(
         torch.full((positions.shape[0], 1), uinlet, dtype=torch.float32, device=device),
         Normalizer.KEY_UINLET,
     )
-    static_node_feat = torch.cat([boundary_mask, vol_norm, inlet_norm, pos_norm], dim=-1)
+    static_feats = [boundary_mask, vol_norm, inlet_norm]
+    if config.INCLUDE_CELL_POSITION:
+        static_feats.append(pos_norm)
+    static_node_feat = torch.cat(static_feats, dim=-1)
 
     out: dict[str, torch.Tensor | float | str] = {
         "representation": representation,
@@ -169,7 +172,10 @@ def load_static_graph_from_case_dir(
         torch.zeros((positions.shape[0], 1), dtype=torch.float32),
         Normalizer.KEY_UINLET,
     )
-    static_node_feat = torch.cat([boundary_mask, vol_norm, inlet_norm, pos_norm], dim=-1)
+    static_feats = [boundary_mask, vol_norm, inlet_norm]
+    if config.INCLUDE_CELL_POSITION:
+        static_feats.append(pos_norm)
+    static_node_feat = torch.cat(static_feats, dim=-1)
 
     out.update(
         {

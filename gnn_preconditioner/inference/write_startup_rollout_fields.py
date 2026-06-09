@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path
 import sys
+import time
 
 import torch
 
@@ -197,6 +198,9 @@ def main() -> None:
 
     static = _build_case_static_graph(case_dir=case_dir, normalizer=normalizer, device=device)
 
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    _t_load0 = time.perf_counter()
     model = MeshGraphNet(
         input_dim_nodes=int(static["static_node_feat"].shape[1] + 3),
         input_dim_edges=int(static["edge_attr"].shape[1]),
@@ -206,6 +210,9 @@ def main() -> None:
     ckpt = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    gen_model_load_wall_s = time.perf_counter() - _t_load0
 
     positions = static["positions"]
     u_template_path = case_dir / "0" / "U"
@@ -222,6 +229,9 @@ def main() -> None:
     u_xy0 = u_case[:, :2]
     p0 = p_case.unsqueeze(-1)
 
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    _t_roll0 = time.perf_counter()
     u_xy_roll, p_roll, step_summaries = _rollout_from_openfoam_state(
         model=model,
         normalizer=normalizer,
@@ -234,6 +244,9 @@ def main() -> None:
         rollout_steps=int(args.rollout_steps),
         apply_boundary_constraints=bool(args.apply_default_boundary_constraints),
     )
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    gen_rollout_forward_wall_s = time.perf_counter() - _t_roll0
 
     vel_out = torch.cat([u_xy_roll, u_case[:, 2:3]], dim=-1).detach().cpu()
     p_out = p_roll.squeeze(-1).detach().cpu()
@@ -258,6 +271,9 @@ def main() -> None:
         "case_dir": str(case_dir),
         "device": str(device),
         "rollout_steps": int(args.rollout_steps),
+        "gen_model_load_wall_s": float(gen_model_load_wall_s),
+        "gen_rollout_forward_wall_s": float(gen_rollout_forward_wall_s),
+        "gen_total_wall_s": float(gen_model_load_wall_s + gen_rollout_forward_wall_s),
         "apply_default_boundary_constraints": bool(args.apply_default_boundary_constraints),
         "case_uinlet": float(static["uinlet"]),
         "surface_node_count": int(positions.shape[0]),
