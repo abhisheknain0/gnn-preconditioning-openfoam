@@ -69,6 +69,7 @@ echo "### (A) TRANSIENT matched (dt=0.01, alpha=1, every step, FIXED dt) ###"
 bash gnn_preconditioner/inference/sweep_dtscaled_iterreduce_v1.sh \
   --cases "${TESTCASES}" \
   --variants "dtscaled_train_r1" \
+  --inject-every-time-step true \
   --adjust-time-step no --delta-t 0.01 --end-time 2.0 \
   --results-dir "${OUT}/transient_matched"
 
@@ -78,6 +79,7 @@ echo "### (B) TRANSIENT fine-step (dt=0.002, alpha=0.2, every step) ###"
 bash gnn_preconditioner/inference/sweep_dtscaled_iterreduce_v1.sh \
   --cases "${TESTCASES}" \
   --variants "dtscaled_train_r1" \
+  --inject-every-time-step true \
   --adjust-time-step no --delta-t 0.002 --end-time 2.0 \
   --results-dir "${OUT}/transient_finestep"
 

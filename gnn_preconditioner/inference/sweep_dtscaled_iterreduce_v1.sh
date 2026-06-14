@@ -26,6 +26,7 @@ CASES="6 10 11 13 18 30 37 78 94 97"
 VARIANTS="manual_r100 dtscaled_train_r100 dtscaled_horizon_r100 dtscaled_train_r10 dtscaled_train_r1"
 END_TIME="3.0"
 ADJUST_TIME_STEP=""
+INJECT_EVERY_TIME_STEP=""
 DELTA_T=""
 RESULTS_DIR=""
 DRY_RUN="false"
@@ -53,6 +54,7 @@ while [[ $# -gt 0 ]]; do
     --variants) VARIANTS="$2"; shift 2 ;;
     --end-time) END_TIME="$2"; shift 2 ;;
     --adjust-time-step) ADJUST_TIME_STEP="$2"; shift 2 ;;
+    --inject-every-time-step) INJECT_EVERY_TIME_STEP="$2"; shift 2 ;;
     --delta-t) DELTA_T="$2"; shift 2 ;;
     --results-dir) RESULTS_DIR="$2"; shift 2 ;;
     --dry-run) DRY_RUN="true"; shift ;;
@@ -135,6 +137,9 @@ for VARIANT in ${VARIANTS}; do
     fi
     if [[ -n "${START_INJECT_TIME}" ]]; then
       CMD+=(--start-inject-time "${START_INJECT_TIME}")
+    fi
+    if [[ -n "${INJECT_EVERY_TIME_STEP}" ]]; then
+      CMD+=(--inject-every-time-step "${INJECT_EVERY_TIME_STEP}")
     fi
     if [[ -n "${ADJUST_TIME_STEP}" ]]; then
       CMD+=(--adjust-time-step "${ADJUST_TIME_STEP}")

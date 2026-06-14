@@ -108,13 +108,13 @@ def make_triptych(cmap="turbo"):
 
 
 # ===================== CORRECTED NOISE FRAME STRIP ===========================
-def make_frame_strip(cmap="turbo", steps=(1, 100, 200)):
+def make_frame_strip(cmap="turbo", steps=(100, 200)):
     rows = [("OpenFOAM", d["gt_vel"]),
             ("Baseline", d["baseline_vel"]),
             ("Noise  $\\sigma$=0.05", d["noise_vel"])]
     vmax = float(np.percentile(umag(d["gt_vel"][100]), 99.5))
     set_scale(558.6, 1.0)  # placed at width=100%
-    fig, axes = plt.subplots(3, 3, figsize=(7.6, 1.75), constrained_layout=True)
+    fig, axes = plt.subplots(3, len(steps), figsize=(7.6, 2.6), constrained_layout=True)
     fig.set_constrained_layout_pads(hspace=0.0, wspace=0.0, h_pad=0.015, w_pad=0.02)
     for r, (rlabel, vel) in enumerate(rows):
         for c, s in enumerate(steps):

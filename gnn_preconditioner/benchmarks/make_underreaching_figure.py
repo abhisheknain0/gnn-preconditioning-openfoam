@@ -69,10 +69,11 @@ def main():
     ax[1].set_ylabel("cumulative power fraction")
     ax[1].set_ylim(0, 1.02)
     ax[1].set_title("(b) cumulative error power", loc="left", fontsize=fs(RENDER["title"]))
-    ctext = "spectral centroid   " + "    ".join(
-        f"{LAB[c].split()[-1]} $k_c$={cen[c]['spectral_centroid']:.1f}" for c in ["p", "ux", "uy"]
+    ctext = "spectral centroid\n" + "\n".join(
+        f"{LAB[c].split()[-1]}  $k_c$={cen[c]['spectral_centroid']:.1f}" for c in ["p", "ux", "uy"]
     )
-    ax[1].text(0.03, 0.06, ctext, transform=ax[1].transAxes, fontsize=fs(RENDER["small"]), color="#555555")
+    ax[1].text(0.97, 0.05, ctext, transform=ax[1].transAxes, ha="right", va="bottom",
+               fontsize=fs(RENDER["small"]), color="#555555", linespacing=1.45)
 
     fig.tight_layout()
     fig.savefig(OUT, bbox_inches="tight")
