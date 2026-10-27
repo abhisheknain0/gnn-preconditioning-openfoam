@@ -1,0 +1,18 @@
+# Generated data and trained weights (download the model from Releases; regenerate data with data_generation/)
+gnn_preconditioner/data_generation/cases/
+gnn_preconditioner/data_generation/datasets/
+gnn_preconditioner/checkpoints/
+gnn_preconditioner/benchmarks/runs/
+gnn_preconditioner/experiments/
+*.h5
+*.pt
+*.ts
+
+# Python / OS
+__pycache__/
+*.pyc
+.DS_Store
+
+# OpenFOAM build output
+lnInclude/
+Make/linux*/
